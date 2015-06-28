@@ -1,13 +1,44 @@
 (ns scarletto.render
-  (:require [scarletto.factory :as f])
-  (:import [com.badlogic.gdx.graphics.g2d SpriteBatch Batch ParticleEffect]
+  (:require [scarletto.factory :as f]
+            [play-clj.core :refer :all]
+            [play-clj.g2d :refer :all])
+  (:import [com.badlogic.gdx.graphics.g2d SpriteBatch Batch ParticleEffect BitmapFont TextureRegion]
            [com.badlogic.gdx.graphics Texture]
            [com.badlogic.gdx Gdx]
+           [com.badlogic.gdx.scenes.scene2d Stage]
            [com.badlogic.gdx.math Vector2]
-           [com.badlogic.gdx.graphics FPSLogger]
+           [com.badlogic.gdx.graphics FPSLogger Color]
            [com.badlogic.gdx.graphics OrthographicCamera]
            [com.badlogic.gdx.graphics.glutils ShapeRenderer ShapeRenderer$ShapeType]))
+(defmacro defn-memo [name & body]
+  `(def ~name (memoize (fn ~body))))
 
+
+
+(defn draw-in-center-with-rotation
+  [batch tr x y rotation]
+  (let [w (.getRegionWidth ^TextureRegion tr)
+        h (.getRegionHeight ^TextureRegion tr)
+        ^double rx (- x (/ w 2))
+        ^double ry (- y (/ h 2))]
+    (.draw ^SpriteBatch batch ^TextureRegion tr rx ry (/ w 2) (/ h 2) w h 1 1 ^double (+ 90 rotation))))
+
+
+(defn draw-in-center
+  [^SpriteBatch batch ^TextureRegion tr x y]
+  (let [w (.getRegionWidth tr)
+        h (.getRegionHeight tr)
+        ^double rx (- x (/ w 2))
+        ^double ry (- y (/ h 2))]
+    (.draw batch tr rx ry)))
+
+(defn draw-in-center-with-rotation-and-zoom
+  [batch tr x y rotation zoom]
+  (let [w (.getRegionWidth ^TextureRegion tr)
+        h (.getRegionHeight ^TextureRegion tr)
+        ^double rx (- x (/ w 2))
+        ^double ry (- y (/ h 2))]
+    (.draw ^SpriteBatch batch ^TextureRegion tr rx ry (/ w 2) (/ h 2) w h zoom zoom ^double rotation)))
 
 (defmulti render-debug-entity
   (fn [entity renderer]
@@ -59,17 +90,272 @@
   (.setColor renderer 0 1 1 1)
   (.circle renderer (:x entity) (:y entity) (:radius entity)))
 
+(defmethod render-debug-entity :default [entity renderer])
+
 (defn render-debug
   "debug renderer for collisions"
   [{:keys [shape-renderer ortho-cam] :as screen} entities]
   (let [^ShapeRenderer renderer shape-renderer
         ^OrthographicCamera cam ortho-cam]
+    (.update cam)
+    (.setProjectionMatrix renderer (.combined cam))
+    (.begin renderer (ShapeRenderer$ShapeType/Line))
+    (.setColor renderer 1 1 1 1)
+    (doseq [entity entities]
+      (render-debug-entity entity renderer))
+    (.end renderer))
+  entities)
+
+(defn abs-x [x]
+  (- x 34))
+
+(defn abs-y [y]
+  (- y 25))
+
+(defn in?
+  "true if seq contains elm"
+  [seq elm]
+  (some #(= elm %) seq))
+
+(defn get-render-type [e]
+  (let [m [:circle :polygon]]
+    (if (in? m (:type e))
+      :bullet
+      (:type e))))
+
+(defmulti render-real-entity
+  (fn [entity ^SpriteBatch batch font screen]
+    (get-render-type entity)))
+
+
+
+(defmethod render-real-entity :fps-counter [entity batch ^BitmapFont font screen]
+  (.draw font batch (str "fps: " (:fps entity)) 565 0))
+
+(defmethod render-real-entity :dialog
+  [entity ^SpriteBatch batch ^BitmapFont font screen]
+  (let [tex-obj (texture "dialog.png")
+        ^TextureRegion tex (:object tex-obj)
+
+        fading? (integer? (:ftimer entity))
+
+        non-fading-opacity (min 1.0 (* 0.1 (:timer entity)))
+        ftimer (or (:ftimer entity) 0)
+        fading-opacity (max 0.0 (- 1 (* 0.1 ftimer)))
+        opacity (if fading?
+                  fading-opacity
+                  non-fading-opacity)
+        ^Color ori-color (.getColor batch)]
+    (.setColor batch (.r ori-color) (.g ori-color) (.b ori-color) opacity)
+    (.draw batch tex 10.0 10.0)
+    (.draw font batch (:str entity) 20 50)
+    (.setColor batch ori-color)))
+
+(defn get-bullet-row [bullet]
+  (case (:graphics-type bullet)
+    :circle 3
+    :rice 4
+    :star 10))
+
+(defn get-bullet-column [bullet]
+  (:color bullet))
+
+(defn get-bullet-texture-region-e [bullet screen]
+  (let [r (get-bullet-row bullet)
+        c (get-bullet-column bullet)]
+    ^TextureRegion (nth (nth (:bullet-textures screen) c) r)))
+
+(defn get-player-texture-bounds [player]
+  (let [vel (:velocity player)
+        abs-vel (if (neg? vel)
+                  (* vel -1))
+        t (:timer player)
+        raw-bounds (cond
+         (pos? vel) (if (= vel 7)
+                      [(+ vel (- (quot (mod t 15) 3) 4)) 2]
+                      [vel 2])
+         (neg? vel) (if (= abs-vel 7)
+                      [(* (+ abs-vel (- (quot (mod t 15) 3) 4)) 1) 1]
+                      [(* vel -1) 1])
+         :else [(int (/ (mod t 24) 3)) 0])]
+    [(* 48 (first raw-bounds)) (* 72 (last raw-bounds))]))
+
+(defn get-player-texture [player screen]
+  (let [^TextureRegion t (:player-texture screen)
+        bounds (get-player-texture-bounds player)
+        exact-region (TextureRegion. ^TextureRegion t ^int (first bounds) ^int (last bounds) 48 72)]
+    exact-region))
+
+(defn get-player-focus-texture [player screen]
+  (let [^TextureRegion t (:etama2 screen)
+        exact-region (TextureRegion. t 0 24 96 96)]
+    exact-region))
+
+(defn get-player-option-texture [player screen]
+  (:option screen))
+
+(defn get-player-bullet-texture [bullet screen]
+  (let [^TextureRegion t (if (= (:dmg bullet) 3)
+                           (:reimu-shot2 screen)
+                           (:paper screen))
+        exact-region t]
+    exact-region))
+
+(def ^TextureRegion get-bullet-texture-region get-bullet-texture-region-e)
+
+
+(defn draw-pure-bullet
+  [entity ^SpriteBatch batch ^BitmapFont font screen]
+  (let [
+        ^TextureRegion btex (get-bullet-texture-region entity screen)
+        x (:x entity)
+        y (:y entity)]
+    (draw-in-center-with-rotation batch btex x y (:rot-angle entity))))
+
+(defn draw-appear-effect
+  [entity ^SpriteBatch batch ^BitmapFont font screen]
+  (let [^TextureRegion etex (first (:appear-textures screen))
+        x (:x entity)
+        y (:y entity)
+        t (:timer entity)
+        zoom (* 0.6 (- 1 (/ t 20)))]
+    (draw-in-center-with-rotation-and-zoom batch etex x y (:rot-angle entity) zoom)))
+
+(defmethod render-real-entity :bullet
+  [entity ^SpriteBatch batch ^BitmapFont font screen]
+  (let [t (:timer entity)]
+    (if (<= t 10)
+      (draw-appear-effect entity batch font screen)
+      (draw-pure-bullet entity batch font screen))))
+
+
+
+(defmethod render-real-entity :player
+  [entity ^SpriteBatch batch ^BitmapFont font screen]
+  (draw-in-center batch (get-player-texture entity screen) (:x entity) (:y entity))
+  (.setColor batch 1 1 1 (/ (:focused entity) 40.0))
+  (let [t (:timer entity)
+        rot (mod t 360)
+        ftexture (get-player-focus-texture entity screen)]
     (do
-        (.update cam)
-        (.setProjectionMatrix renderer (.combined cam))
-        (.begin renderer (ShapeRenderer$ShapeType/Line))
-	(.setColor renderer 1 1 1 1)
-        (doseq [entity entities]
-          (render-debug-entity entity renderer))
-        (.end renderer)))
+      (draw-in-center-with-rotation batch ftexture (:x entity) (:y entity) rot)
+      (draw-in-center-with-rotation batch ftexture (:x entity) (:y entity) (- 360 rot))))
+  (.setColor batch 1 1 1 1)
+  (doseq [^Vector2 v (f/get-player-option-pos entity)
+          :let [px (:x entity)
+                py (:y entity)
+                rx (+ (.x v) px)
+                ry (+ (.y v) py)]]
+    (draw-in-center-with-rotation batch (get-player-option-texture entity screen) rx ry (.angle v))))
+
+(defmethod render-real-entity :pbullet
+  [entity ^SpriteBatch batch ^BitmapFont font screen]
+  (.setColor batch 1 1 1 0.6)
+  (draw-in-center batch (get-player-bullet-texture entity screen) (:x entity) (:y entity))
+  (.setColor batch 1 1 1 1))
+
+(defn render-boss-shooter
+  [entity ^SpriteBatch batch ^BitmapFont font screen])
+
+
+(defn is-horz-moving-at-frame-before-ticks-with-dir?
+  [entity dir f]
+  (let [s entity
+        ticks (* 3 f)
+        t (- (:timer s) ticks)
+        p (:path s)
+        m (:movement s)
+        ^Vector2 p (f/calc-point-derivative t p m)
+        dx (.x p)
+        dy (.y p)
+        rt (int (/ t 3)) ;;revamped t
+        horz-moving? (> (Math/abs dx) 0.5)
+        r (if horz-moving?
+            (= (pos? dx) (pos? dir))
+            false)]
+    r))
+
+(defn get-dx-of-shooter
+  [entity]
+    (let [s entity
+        t (:timer entity)
+        p (:path s)
+        m (:movement s)
+        ^Vector2 p (f/calc-point-derivative t p m)
+        dx (.x p)]
+    dx))
+
+
+(defn judge-movement
+  ;; if the shooter has moved during the previous 1 tick => 1
+  ;; if the shooter has moved during the previos 2 ticks => 2
+  ;; if the shooter has moved during the previous 3 ticks => 3
+  ;; if the shooter has moved during the previous 4 ticks => 4
+  [entity]
+  (let [current-movement-dir (get-dx-of-shooter entity)]
+    (count
+     (transduce (comp (map (partial is-horz-moving-at-frame-before-ticks-with-dir? entity current-movement-dir))
+                  (filter true?)) conj
+            [1 2 3 4 5]))))
+
+
+
+(defn render-normal-shooter
+  [entity ^SpriteBatch batch ^BitmapFont font screen]
+    (let [s entity
+          movement (judge-movement entity)
+        t (:timer s)
+        p (:path s)
+        m (:movement s)
+        ^Vector2 p (f/calc-point-derivative t p m)
+        dx (.x p)
+        dy (.y p)
+        rt (int (/ t 3)) ;;revamped t
+        horz-moving? (> (Math/abs dx) 0.5)
+
+        tindex (if horz-moving?
+                 (+ 5 (if (>= movement 4)
+                        (+ 3 (mod rt 3))
+                        movement))
+                 (mod rt 5))
+
+        flipped (if horz-moving?
+                  (neg? dx)
+                  false)
+        texs (:enemy-textures screen)
+        ;;;nnn (println flipped)
+        ^TextureRegion tex (nth (nth texs tindex) 0)
+        nt (TextureRegion. tex)
+        n (.flip nt flipped false)
+        x (:x s)
+        y (:y s)]
+    (do
+      (draw-in-center batch nt x y))))
+
+(defmethod render-real-entity :shooter
+  [entity ^SpriteBatch batch ^BitmapFont font screen]
+  (if (:boss entity)
+    (render-boss-shooter entity ^SpriteBatch batch ^BitmapFont font screen)
+    (render-normal-shooter entity ^SpriteBatch batch ^BitmapFont font screen)))
+
+(defmethod render-real-entity :default [entity ^SpriteBatch batch font screen])
+
+(defn get-front-frame-texture [screen]
+  (:front-texture screen))
+
+(defn render-real
+  "the real renderer for game"
+  [{:keys [^Stage renderer font ^OrthographicCamera ortho-cam ^SpriteBatch hub-batch] :as screen} entities]
+
+  (let [^SpriteBatch batch (.getBatch renderer)]
+    (do
+      (.update ortho-cam)
+      (.setProjectionMatrix batch (.combined ortho-cam))
+      (.begin batch)
+      (doseq [entity entities]
+        (render-real-entity entity batch font screen))
+      (.end batch)
+      (.begin hub-batch)
+      (.draw hub-batch ^TextureRegion (get-front-frame-texture screen) 0.0 0.0)
+      (.end hub-batch)))
   entities)

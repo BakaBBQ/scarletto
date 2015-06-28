@@ -11,11 +11,11 @@
         d (- y2 y1)
         dot (+ (* a c) (* b d))
         len-sq (+ (* c c) (* d d))
-        param (if (= len-sq 0)
+        param (if (zero? len-sq)
                 -1
                 (/ dot len-sq))
         xxyy (cond
-              (< param 0)
+              (neg? param)
               [x1 y1]
               (> param 1)
               [x2 y2]
@@ -24,8 +24,7 @@
         xx (first xxyy)
         yy (last xxyy)
         dx (- x xx)
-        dy (- y yy)
-        ]
+        dy (- y yy)]
     (Math/hypot dx dy)))
 
 (defmulti bullet-collide-player?

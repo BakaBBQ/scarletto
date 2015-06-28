@@ -1,5 +1,6 @@
 (ns scarletto.logics
   (:require [play-clj.core :refer :all]
+            [scarletto.config :refer :all]
             [scarletto.collide :as c]
             [scarletto.decorators :as d]
             [scarletto.factory :as f]
@@ -25,24 +26,41 @@
      :else
      0)])
 
+(defn in-area-of-effect
+  [e]
+  (let [x (:x e)
+        y (:y e)]
+    (and
+     (> x 0)
+     (> y 0)
+     (< x offset-stage-right-bound)
+     (< y offset-stage-upper-bound))))
+
+(defn update-exempt-once
+  [e]
+  (if (and (:exempt-once e) (:ngc e))
+    (if (in-area-of-effect e)
+      (assoc e :exempt-once false :ngc false)
+      e)
+    e))
+
 (defmulti update-entity
   (fn [entity entities screen]
     (:type entity)))
 
-
-
 (defn set-player-x [p x]
-  (assoc p :x
+  (let [rb offset-stage-right-bound]
+    (assoc p :x
          (cond
           (< x 0) 0
-          (> x 382) 382
-          :else x)))
+          (> x rb) rb
+          :else x))))
 
 (defn set-player-y [p y]
   (assoc p :y
          (cond
           (< y 0) 0
-          (> y 442) 442
+          (> y offset-stage-upper-bound) offset-stage-upper-bound
           :else y)))
 
 (defn update-focused-timer
@@ -53,18 +71,50 @@
     (update-in p [:focused]
                (fn [x] (max 0 (dec x))))))
 
+(defn dec-abs [n]
+  (if (pos? n)
+    (dec n)
+    (if (neg? n)
+      (inc n)
+      n)))
+
+(defn ensure-not-out-of-bound [lb rb n]
+  (if (< n lb)
+    lb
+    (if (> n rb)
+      rb
+      n)))
+
+(defn update-player-velocity
+  [player directions]
+  (if (= (mod (:timer player) 3) 0)
+    (let [dx (first directions)]
+    (update-in
+     (case (int dx)
+      ;; if there is no movement the counter should go down
+      0 (update-in player [:velocity] dec-abs)
+      1 (update-in player [:velocity] inc)
+      -1 (update-in player [:velocity] dec))
+     [:velocity] (partial ensure-not-out-of-bound -7 7)))
+    player))
+
 (defmethod update-entity :player [entity entities screen]
   (let [slow-mode (key-pressed? :shift-left)
-        speed-multiplyer (if slow-mode 1 2)
-        offsets (map (partial * speed-multiplyer) (fold-directions))
+        speed-multiplyer (if slow-mode (first reimu-speed) (last reimu-speed))
+        dirs (fold-directions)
+        offsets (map (partial * speed-multiplyer) dirs)
         player entity
         x (:x player)
         y (:y player)]
     (-> entity
         (set-player-x (+ (first offsets) x))
         (set-player-y (+ (last offsets)  y))
+        (update-player-velocity dirs)
         (update-focused-timer slow-mode)
         (c/collide-check entities))))
+
+(defmethod update-entity :fps-counter [entity entities screen]
+  (update-in entity [:fps] (constantly (game :fps))))
 
 (defn update-death
   [entity]
@@ -75,13 +125,13 @@
         entity)
       entity)))
 
-(defmethod update-entity :fps-counter [entity entities screen]
-  (-> entity
-      (update-in [:fps] (game :fps))))
-
 (defmulti deal-damage
   (fn [entity hp]
     (:boss entity)))
+
+(defmethod deal-damage true [entity dmg]
+  (-> entity
+      (update-in [:hp] (fn [x] (- x dmg)))))
 
 (defmethod deal-damage :default [entity dmg]
   (-> entity
@@ -89,22 +139,39 @@
       (update-death)))
 
 (defn update-shooter-collide [entity entities screen]
-  (let [all-bullets (filter (fn [x] (= (:type x) :pbullet)) entities)
+  (let [entities-grouped (:entities-grouped screen)
+        all-bullets (:pbullet entities-grouped)
         is-collide (filter
                     (fn [x] (c/player-bullet-collide-shooter? entity x))
                     all-bullets)]
           (if (and is-collide ((comp not empty?) is-collide))
-            (let [dmg (apply + (map (fn [x] (:dmg x)) is-collide))]
+            (let [dmg (apply + (map :dmg is-collide))]
               (deal-damage entity dmg))
             entity)))
+
+(comment defn spell-card-in-effect? [entities]
+  (not (empty? (filter (fn [x] (and (= (:type x) :sc))) entities))))
+
+(defn update-if-boss [entity entities screen]
+  (if (:boss entity)
+    (let [entities-sc (:sc (:entities-grouped screen))
+          starting-spell-cards (filter (fn [x] (zero? (:timer x))) entities-sc)]
+      (if-not (empty? starting-spell-cards)
+        (assoc entity :hp (:hp (first starting-spell-cards)))
+        entity))
+    entity))
 
 (defmethod update-entity :shooter [entity entities screen]
   (-> entity
       (d/update-single-shooter entities screen)
-      (update-shooter-collide entities screen)))
+      (update-shooter-collide entities screen)
+      (update-if-boss entities screen)))
+
+
 
 (defmethod update-entity :pbullet [entity entities screen]
-  (let [all-shooters (filter (fn [x] (= (:type x) :shooter)) entities)
+  (let [entities-grouped (:entities-grouped screen)
+        all-shooters (:shooter entities-grouped)
         is-collide  (some
                      (fn [x] (c/player-bullet-collide-shooter? entity x))
                      all-shooters)
@@ -128,7 +195,7 @@
         d  (c/distance (:x entity) (:y entity) (:x player) (:y player))
         did-collide (< d 3.5)
 
-        is-move-closer (or (< d 40) (> (:y player) 355) (:attract i))
+        is-move-closer (or (< d 40) (> (:y player) 533) (:attract i))
 
         attractive-force (min d 6)
 
@@ -136,12 +203,12 @@
 
         vx (if is-move-closer
              (.x attract-speed)
-              (if (< magnitude 0)
+              (if (neg? magnitude)
                 0
                 (.x newspeed)))
         vy (if is-move-closer
              (.y attract-speed)
-             (if (< magnitude 0)
+             (if (neg? magnitude)
              (- 1)
              (.y newspeed)))
         ]
@@ -150,7 +217,8 @@
         (update-in [:y] (partial + vy))
         (assoc :dead did-collide)
         (assoc :collided did-collide)
-        (assoc :attract is-move-closer))))
+        (assoc :attract is-move-closer)
+        (update-exempt-once))))
 
 (defn update-rotation [entity]
   (let [rot (:rotation entity)]
@@ -160,11 +228,40 @@
                  (partial map (fn [x] (f/rotate-vector x rot))))
       entity)))
 
+(defmethod update-entity :wait [entity entities screen]
+  (if (empty? (filter (fn [e] (or
+                              (and
+                               (= (:type e) :shooter)
+                               (not (:boss e)))
+                              (= (:type e) :dialog)
+                              (= (:type e) :sc)))
+                      entities))
+    (assoc entity :ngc false :dead true)
+    entity))
+
+(defmethod update-entity :dialog [entity entities screen]
+  (let [key (key-pressed? :z)
+        ctrl (key-pressed? :control-left)
+        t (:timer entity)
+        fading? (integer? (:ftimer entity))]
+    (cond
+     (<= 0 t 9) entity
+     (<= 10 t) (if-not fading?
+                 (if key
+                   (assoc entity :ftimer 0)
+                   entity)
+                 (if (> (:ftimer entity) 10)
+                   (assoc entity :dead true :ngc false)
+                   (update-in entity [:ftimer] inc))))))
+
+(defmethod update-entity :sc [entity entities screen]
+      entity)
+
 (defmethod update-entity :default [entity entities screen]
   (let [^Vector2 vel (:vel entity)]
     (-> entity
-      (update-in [:x] (partial + (.x vel)))
-      (update-in [:y] (partial + (.y vel)))
+      (update :x + (.x vel))
+      (update :y + (.y vel))
       (update-rotation))))
 
 (defmulti update-entity-input
@@ -172,7 +269,7 @@
     [(entity :type) (:key screen)]))
 
 (defmethod update-entity-input [:player (key-code :left)] [screen entity]
-  (assoc entity :x (- ^double (:x entity) 3)))
+  (update-in entity [:x] - 3))
 
 (defmethod update-entity-input :default [screen entity]
   entity)
@@ -193,7 +290,7 @@
                 (+ x amt)))))
 
 (defmulti get-dead-entities-effect
-  (fn [e] (:dtag e)))
+  :dtag)
 
 (defn dead? [e]
   (<= (:hp e) 0))
@@ -214,13 +311,14 @@
   [alive dead]
   (let [
         items (filter (fn [x] (= (:type x) :item)) dead)
-        items-grouped (group-by (fn [x] (:tag x)) items)
+        items-grouped (group-by :tag items)
         poweritems (:power items-grouped)
         p (first alive)
         power-accumulation (* 5 (count poweritems))
         powered-up-player (add-power p power-accumulation)
 
         player-replaced (assoc alive 0 powered-up-player)
+
         e-sideeffects (flatten
                        (for [e dead]
                         (get-dead-entities-effect e)))]
@@ -234,16 +332,20 @@
                 (fn [e]
                   (let [^double x (:x e)
                         ^double y (:y e)
-                        ^int r (:radius e)
+                        ^int r (or (:radius e) 0)
+
+                        gc-down (or (:gc-down e) 0)
+                        gc-up (or (:gc-up e) offset-stage-upper-bound)
                         b (* 1.5 r)]
-                    (and
-                     (not= (:ngc e) true)
-                     (or
-                      (< x (- b))
-                      (< y (- b))
-                      (> x (+ 382 b))
-                      (> y (+ 442 b))
-                      (:dead e))))))
+                     (and
+                       (not= (:ngc e) true)
+                       (or
+                        (:dead e)
+                        (< x (- b))
+                        (< y (- gc-down b))
+                        (> x (+ offset-stage-right-bound b))
+                        (> y (+ gc-up b))
+                        )))))
         grouped (group-by f entities)
 
         alive (get grouped true)
@@ -253,29 +355,59 @@
         ]
     r))
 
-(defn in-area-of-effect
-  [e]
-  (let [x (:x e)
-        y (:y e)]
-    (and
-     (> x 0)
-     (> y 0)
-     (< x 382)
-     (< y 442))))
+(defn clean-entities-trans
+  [entities])
+
+(defn clean-dead-bosses [entities screen]
+  (if
+      (not (empty? (filter (fn [x]
+                             (and
+                              (:boss x)
+                              (<= (:hp x) 0)))
+                           (:shooter (:entities-grouped screen)))))
+    (map (fn [x]
+           (if (= (:type x) :sc)
+             (f/bullet-circle 5 100 100 (f/polar-vector 0 10))
+             x))
+         entities)
+    entities))
+
+
+;;let me explain the logic here
+;;
+;; if (there is some boss with a hp <= 0) then
+;;   create some circle bullets....
+;; else
+;;   do nothing
+
+
+;; then for refactoring
+;; if (there is some boss with a hp <= 0) then
+;;   return a transducer
+;; else
+;;   return identity
+(defn clean-dead-bosses-trans [entities screen]
+  (if
+      (not (empty? (filter (fn [x]
+                             (and
+                              (:boss x)
+                              (<= (:hp x) 0)))
+                           (:shooter (:entities-grouped screen)))))
+    (map (fn [x]
+           (if (= (:type x) :sc)
+             (f/bullet-circle 5 100 100 (f/polar-vector 0 10))
+             x)))
+    identity))
+
+
 
 (defn update-timer
   [e]
   (if (:timer e)
-    (update-in e [:timer] inc)
+    (update e :timer inc)
     e))
 
-(defn update-exempt-once
-  [e]
-  (if (and (:exempt-once e) (:ngc e))
-    (if (in-area-of-effect e)
-      (assoc e :exempt-once false :ngc false)
-      e)
-    e))
+
 
 (defn update-individuals
   "only updates the every each entity"
@@ -283,8 +415,19 @@
   (for [e entities]
     (-> e
         (update-entity entities screen)
-        (update-timer)
-        (update-exempt-once))))
+        (update-timer))))
+
+;; update-entity e entities screen
+;; update-timer e
+;; update-exempt-once e
+
+(defn update-individuals-trans
+  [entities screen]
+  (let [f (fn [x] (-> x
+                      (update-entity entities screen)
+                      (update-timer)
+                      (update-exempt-once)))]
+    (map f)))
 
 (defmulti get-option-bullets
   (fn [option player]
@@ -296,49 +439,68 @@
         py (:y p)
         rx (+ px ox)
         ry (+ py oy)]
-    (f/player-bullet 4 rx ry (f/polar-vector 14 90) 2)))
+    (f/player-bullet 4 rx ry (f/polar-vector 18 90) 2)))
 
 (defn get-player-option-bullets
   [p]
   (let [option-pos (f/get-player-option-pos p)]
-    (map (fn [v] (get-single-option-bullets p (.x v) (.y v)))
+    (map (fn [^Vector2 v] (get-single-option-bullets p (.x v) (.y v)))
          option-pos)))
 
 (defn get-player-bullets
   [p]
   (let [px (:x p)
         py (:y p)
-        b1 (f/player-bullet 5 (- px 10) py (f/polar-vector 12 90) 3)
-        b2 (f/player-bullet 5 (+ px 10) py (f/polar-vector 12 90) 3)]
+        b1 (f/player-bullet 5 (- px 10) py (f/polar-vector 16 90) 3)
+        b2 (f/player-bullet 5 (+ px 10) py (f/polar-vector 16 90) 3)]
     [b1 b2]))
 
 (defn update-player-bullets
   [entities screen]
-  (let [p (first entities)
+  (let [entities-grouped (:entities-grouped screen)
+        p (first entities)
         px (:x p)
         py (:y p)
         t (:timer p)
-        pressed-shoot (key-pressed? :z)]
+        pressed-shoot (key-pressed? :z)
+        can-shoot (empty? (:dialog entities-grouped))
+        do-shoot (and pressed-shoot can-shoot)]
     (concat entities
-            (if (and pressed-shoot (= (mod t 6) 0))
+            (if (and do-shoot (= (mod t 6) 0))
               (get-player-bullets p)
               [])
-            (if (and pressed-shoot (= (mod t 4) 0))
+            (if (and do-shoot (= (mod t 4) 0))
               (get-player-option-bullets p)
               []))))
 
-(defn update-entities
+(defn update-player-bullets-trans
+  [entities screen]
+  (let [entities-grouped (:entities-grouped screen)
+        p (first entities)
+        px (:x p)
+        py (:y p)
+        t (:timer p)
+        pressed-shoot (key-pressed? :z)
+        can-shoot (empty? (:dialog entities-grouped))
+        do-shoot (and pressed-shoot can-shoot)]
+    (fn [x]
+      (concat x
+            (if (and do-shoot (= (mod t 6) 0))
+              (get-player-bullets p)
+              [])
+            (if (and do-shoot (= (mod t 4) 0))
+              (get-player-option-bullets p)
+              [])))))
+
+(defn update-entities-trans
   [screen entities]
-  (-> entities
+  (update! screen :entities-grouped (group-by :type entities))
+  (fn [x]
+    (-> x
       (update-individuals screen)
       (clean-entities)
-      (update-player-bullets screen)))
+      (update-player-bullets screen))))
 
 (defn update-shooters
-  [screen entities]
+  [entities screen]
   (d/update-shooters entities screen))
-
-(defn update-entities-input
-  [screen entities]
-  (for [e entities]
-    (update-entity-input screen e)))

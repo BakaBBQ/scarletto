@@ -6,5 +6,5 @@
 
 (defn -main
   []
-  (LwjglApplication. scarletto-game "scarletto" 640 480)
+  (LwjglApplication. scarletto-game "scarletto" 960 720)
   (Keyboard/enableRepeatEvents true))

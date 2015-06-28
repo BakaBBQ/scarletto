@@ -51,13 +51,24 @@
 
 (defn rotate-bullet
   [bullet angle]
-  (if (:vectors angle)
-    (update-in bullet [:vectors] (partial map (fn [x] (rotate-vector x angle))))
+  (if (:vectors bullet)
+    (do
+      (-> bullet
+        (update :vectors (partial map (fn [x] (rotate-vector x angle))))
+        (update :rot-angle + angle)))
     bullet))
 
 (defn bullet-circle
   [r x y vel]
-  {:radius r :x x :y y :type :circle :vel vel})
+  {:rot-angle 0 :radius r :x x :y y :type :circle :vel vel :graphics-type :circle :timer 0})
+
+(defn bullet-circle-small
+  [x y vel]
+  (assoc (bullet-circle 10 x y vel) :color 0))
+
+(defn wait-until-all-clear
+  []
+  {:ngc true :wait true :type :wait})
 
 (defn d-mangnitude
   "default magnitude function for item"
@@ -69,9 +80,32 @@
         r
         0))))
 
+(def color-schemes
+  {:black 0
+   :red 1
+   :pink 2
+   :purple 3
+   :magneta 4
+   :blue 5
+   :sky 6
+   :sea 7
+   :cloud 8
+   :dgreen 9
+   :green 10
+   :lgreen 11})
+
+(defn get-color-scheme
+  [bullet]
+  (let [c (:color bullet)]
+    (if c
+      c
+      ;; default: 0
+      0)))
+
 (defn item
   [x y tag blast-vec]
-  {:x x :y y :tag tag :type :item :vel blast-vec :timer 0 :radius 7.07})
+  {:x x :y y :tag tag :type :item :vel blast-vec :timer 0 :radius 7.07
+   :gc-up (* 490 1.5)})
 
 (defn bullet-polygon
   "arguments: vector of Vector2, int x, int y, Vector2 vel"
@@ -84,39 +118,49 @@
          (fn [^Vector2 v]
            (c/distance 0 0 (.x v) (.y v)))
          vectors))]
-    {:vectors vectors :x x :y y :vel vel :type :polygon :radius r}))
+    {:rot-angle 0 :vectors vectors :x x :y y :vel vel :type :polygon :radius r :timer 0}))
 
 (defn bullet-square
   [a x y vel]
-  (bullet-polygon
-   [(rect-vector a a)
-    (rect-vector a (- 0 a))
-    (rect-vector (- 0 a) (- 0 a))
-    (rect-vector (- 0 a) a)]
-   x y vel))
+  (assoc
+    (bullet-polygon
+     [(rect-vector a a)
+      (rect-vector a (- 0 a))
+      (rect-vector (- 0 a) (- 0 a))
+      (rect-vector (- 0 a) a)]
+   x y vel)
+    :graphics-type :square)
+  )
 
 (defn bullet-star
   [s x y vel]
-  (let [ts (* 2 s)]
-    (bullet-polygon
-     (apply vector
-            (for [i (range 10)]
-              (polar-vector (if (even? i)
-                              ts
-                              s)
-                            (* i 36))))
-     x y vel)))
+  (let [ts (* 2 s)
+        rb (bullet-polygon
+       (apply vector
+              (for [i (range 10)]
+                (polar-vector (if (even? i)
+                                ts
+                                s)
+                              (* i 36))))
+     x y vel)]
+    (assoc rb :graphics-type :star)))
 
 (defn player-bullet
   [r x y vel dmg]
   {:radius r :x x :y y :type :pbullet :vel vel :dmg dmg
-   :exempt-once true :ngc true})
+   :gc-down -50})
+
+(defn single-dialog
+  [s]
+  {:type :dialog :ngc true :str s :timer 0})
 
 (defn player
   [shottype subtype]
-  {:radius 2 :x (/ 382 2) :y 50 :type :player :collide false
-   :power 0
+  {:radius 2 :x ( * (/ 382 2) 1.5) :y 75 :type :player :collide false
+   :power 400
    :focused 0
+   :ngc true
+   :velocity 0
    :shottype shottype :subtype subtype :timer 0})
 
 (defn focused? [player]
@@ -129,7 +173,26 @@
   (if (> 100 (:power player))
     []
     (let [focused (:focused player)
-          dis (- 60 (* 30 (/ focused 40)))
+          dis (- 90 (* 45 (/ focused 40)))
+          power (:power player)
+          option-cnt (int (Math/floor (/ power 100)))
+          timer (:timer player)
+
+          div-angle (/ 360 option-cnt)
+
+          offset (mod (* 5 timer) 360)
+
+          angles  (for [i (range option-cnt)]
+                    (+ offset (* i div-angle)))
+          vectors (map (fn [theta] (polar-vector dis theta)) angles)]
+      vectors)))
+
+(defn get-player-option-angles
+   [player]
+  (if (> 100 (:power player))
+    []
+    (let [focused (:focused player)
+          dis (- 90 (* 45 (/ focused 40)))
           power (:power player)
           option-cnt (int (Math/floor (/ power 100)))
           timer (:timer player)
@@ -141,7 +204,7 @@
           angles  (for [i (range option-cnt)]
                     (+ offset (* i div-angle)))
           vectors (map (fn [theta] (polar-vector dis theta)) angles)]
-      vectors)))
+      angles)))
 
 (defn ellipse-approximate
   [a b points]
@@ -168,6 +231,10 @@
      (ellipse-approximate a b points)
      x y vel)))
 
+(defn bullet-small-rice
+  [x y vel]
+  (assoc (bullet-rice 10 6 x y vel) :graphics-type :rice :color 0))
+
 (defn bullet-heart
   [s x y vel]
   (let [points 15]
@@ -180,8 +247,9 @@
   (for [x (range ways)
         :let [div (* (/ 360 ways) x)]]
     (-> bullet
-        (update-in [:vel] (fn [vel] (rotate-vector vel (* (/ 360 ways) x))))
-        (update-in [:vectors] (partial map (fn [x] (rotate-vector x div)))))))
+        (update :vel (fn [vel] (rotate-vector vel (* (/ 360 ways) x))))
+        (update :vectors (partial map (fn [x] (rotate-vector x div))))
+        (update :rot-angle + div))))
 
 (defn bullet-shooter
   [tag mtag x y]
@@ -197,14 +265,27 @@
   [time-span]
   (fn [frame]
     (let [x (/ frame time-span)]
-      (- (* 3 (* x x)) (* 2 (Math/pow x 3))))))
+      (- (* 3 x x) (* 2 (Math/pow x 3))))))
+
 (defn linear
   [time-span]
   (fn [frame]
     (let [x (/ frame time-span)]
       x)))
 
+(defn spellcard
+  [tag dtag]
+  {:type :sc :tag tag :dtag dtag :timer 0
+   :ngc true :hp 800})
+
 (defn calc-point ^Vector2
   [frame ^CatmullRomSpline path f2t]
   (let [t (f2t frame)]
     (.valueAt path (Vector2. 0 0) t)))
+
+(defn calc-point-derivative ^Vector2
+  [frame ^CatmullRomSpline path f2t]
+  (if (neg? frame)
+    (Vector2. 0 0)
+    (let [t (f2t frame)]
+      (.derivativeAt path (Vector2. 0 0) t))))
