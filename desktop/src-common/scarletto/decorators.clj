@@ -1,5 +1,6 @@
 (ns scarletto.decorators
   (:require [scarletto.factory :as f]
+            [scarletto.presets :as p]
             [scarletto.lifted :refer :all])
   (:import [com.badlogic.gdx.math Vector2]))
 
@@ -80,7 +81,27 @@
             :mtag nil
     :hp 10))
 
-(defn insert-shooters
+(defn gen-shooter
+  []
+  (let [
+        point1 (Vector2. (+ (rand 600) 240) (+ (rand 480) 240))
+        point2 (Vector2. (+ (rand 600) 240) (+ (rand 480) 240))
+        point3 (Vector2. (+ (rand 600) 240) (+ (rand 480) 240))
+        point4 (Vector2. (+ (rand 600) 240) (+ (rand 480) 240))
+        t (+ 300 (rand 400))]
+    (assoc
+              (f/bullet-shooter-w-path
+               :meow :n (.x point1) (.y point1)
+               [point1 point2 point3 point4]
+               (f/splined t))
+            :dtag (rand-nth [:test :test2 :test3])
+            :exempt-once true
+            :tag (rand-nth [:test :test2])
+            :radius 12
+            :mtag nil
+    :hp 20)))
+
+(comment defn insert-shooters
   [entities screen]
   (let []
     (case (int (:gtimer screen))
@@ -89,16 +110,46 @@
       140 [test-shooter]
       [])))
 
+
+;; gen-shooter
+(defn insert-shooters
+  [entities screen]
+  (if (= (mod (int (:gtimer screen)) 40) 0)
+    [(gen-shooter)]
+    []))
+
 (defshoot :test
   [s entities screen]
   (let [player (first entities)
         x (:x s)
         y (:y s)
-        a (f/vector-to s player (+ 1 (mod (:timer s) 3)))
-        b (f/bullet-small-rice x y a)
+        a (f/vector-to s player (+ 4 (mod (:timer s) 3)))
+        b (p/big-circle x y a)
         b2 (f/rotate-bullet b (.angle a))]
-    (every s 30
+    (every s 10
            (f/nway-shoot b2 10))))
+
+(defshoot :test2
+  [s entities screen]
+  (let [player (first entities)
+        x (:x s)
+        y (:y s)
+        a (f/vector-to s player (+ 4 (mod (:timer s) 5)))
+        b (f/bullet-circle-small x y a)
+        b2 (assoc (f/rotate-bullet b (.angle a)) :color (rand 12))]
+    (every s 10
+           (f/nway-shoot b2 30))))
+
+(defshoot :test3
+  [s entities screen]
+  (let [player (first entities)
+        x (:x s)
+        y (:y s)
+        a (f/vector-to s player (+ 4 (mod (:timer s) 5)))
+        b (f/bullet-circle-small x y a)
+        b2 (f/rotate-bullet b (mod (:timer s) 360))]
+    (every s 10
+           (f/nway-shoot b2 3))))
 
 (defshoot :boss
   [s entities screen]

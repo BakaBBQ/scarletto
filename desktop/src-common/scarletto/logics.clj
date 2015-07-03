@@ -197,7 +197,7 @@
 
         is-move-closer (or (< d 40) (> (:y player) 533) (:attract i))
 
-        attractive-force (min d 6)
+        attractive-force (min d 8)
 
         attract-speed (f/vector-to i player attractive-force)
 
@@ -292,6 +292,9 @@
 (defmulti get-dead-entities-effect
   :dtag)
 
+(defmethod get-dead-entities-effect :default [e]
+  [])
+
 (defn dead? [e]
   (<= (:hp e) 0))
 
@@ -304,8 +307,7 @@
       expanded
       [])))
 
-(defmethod get-dead-entities-effect :default [e]
-  [])
+
 
 (defn get-dead-aftereffects
   [alive dead]
@@ -399,8 +401,6 @@
              x)))
     identity))
 
-
-
 (defn update-timer
   [e]
   (if (:timer e)
@@ -420,7 +420,6 @@
 ;; update-entity e entities screen
 ;; update-timer e
 ;; update-exempt-once e
-
 (defn update-individuals-trans
   [entities screen]
   (let [f (fn [x] (-> x

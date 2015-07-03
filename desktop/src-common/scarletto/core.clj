@@ -39,12 +39,40 @@
                    (TextureRegion. ^TextureRegion etama (* 48 i) 312 48 48))]
     (update! screen :appear-textures textures)))
 
+(defn get-big-fairy-texture [^TextureRegion etama index]
+  (if (< index 8)
+    (TextureRegion. etama (* 96 index) 576 96 96)
+    (case index
+      8 (TextureRegion. etama 576 480 96 96)
+      9 (TextureRegion. etama 672 480 96 96)
+      10 (TextureRegion. etama 576 384 96 96)
+      11 (TextureRegion. etama 672 384 96 96))))
+
+(defn load-all-possible-item-textures! [screen]
+  (let [^TextureRegion etama2 (:object (texture "etama2.png"))
+        textures (for [i (range 16)]
+                   (TextureRegion. etama2 (* 24 i) 312 24 24))]
+    (update! screen :item-textures textures)))
+
 (defn load-all-possible-enemy-textures! [screen]
   (let [^TextureRegion etama (:object (texture "enemy.png"))
         textures (for [i (range 11)]
-                   (for [j (range 4)]
-                     (TextureRegion. ^TextureRegion etama (* 48 i) (+ (* 48 j) 384) 48 48)))]
+                   (for [j (range 5)]
+                     (if (= j 4)
+                       (get-big-fairy-texture etama i)
+                       (TextureRegion. ^TextureRegion etama (* 48 i) (+ (* 48 j) 384) 48 48))))]
     (update! screen :enemy-textures textures)))
+
+(defn load-all-possible-big-bullet-textures! [screen]
+  (let [^TextureRegion etama6 (:object (texture "etama6.png"))
+        textures-2-2 (for [i (range 8)]
+                       (for [j (range 6)]
+                         (TextureRegion. etama6 (* 48 i) (* 48 j) 48 48)))
+        textures-big (for [i (range 4)]
+                       (TextureRegion. etama6 (* 96 i) (* 96 6) 96 96))]
+    (do
+      (update! screen :textures-big textures-2-2)
+      (update! screen :textures-giant textures-big))))
 
 (defn preload-textures! [screen]
   (update! screen :player-texture (:object (texture "pl00.png")))
@@ -56,26 +84,26 @@
 
 (defn render-fn [screen entities]
   (clear!)
-    (update! screen :timer (inc (:timer screen)))
-    (if (empty? (:wait (:entities-grouped screen)))
-      (update! screen :gtimer (inc (:gtimer screen))))
-    (if (.isKeyPressed Gdx/input (key-code :p))
-      (println (count entities)))
-    (if (.isKeyPressed Gdx/input (key-code :s))
-      (if (= (:current-renderer screen) :real)
-        (update! screen :current-renderer :debug)
-        (update! screen :current-renderer :real)))
-    (update! screen :entities-grouped (group-by :type entities))
-    (let [trans-fn (fn [x]
-                     (transduce (comp (l/update-individuals-trans entities screen)
-                                      (l/clean-dead-bosses-trans entities screen))
-                                conj x))]
-      (-> entities
-            (trans-fn)
-            (l/clean-entities)
-            (l/update-player-bullets screen)
-            (l/update-shooters screen)
-            (choose-renderer-and-render screen))))
+  (update! screen :timer (inc (:timer screen)))
+  (if (empty? (:wait (:entities-grouped screen)))
+    (update! screen :gtimer (inc (:gtimer screen))))
+  (if (.isKeyPressed Gdx/input (key-code :p))
+    (println (count entities)))
+  (if (.isKeyPressed Gdx/input (key-code :s))
+    (if (= (:current-renderer screen) :real)
+      (update! screen :current-renderer :debug)
+      (update! screen :current-renderer :real)))
+  (update! screen :entities-grouped (group-by :type entities))
+  (let [trans-fn (fn [x]
+                   (transduce (comp (l/update-individuals-trans entities screen)
+                                    (l/clean-dead-bosses-trans entities screen))
+                              conj x))]
+    (-> entities
+        (trans-fn)
+        (l/clean-entities)
+        (l/update-player-bullets screen)
+        (l/update-shooters screen)
+        (choose-renderer-and-render screen))))
 
 (defscreen main-screen
   :on-show
@@ -84,6 +112,8 @@
     (load-all-possible-bullet-textures! screen)
     (load-all-possible-bullet-appear-textures! screen)
     (load-all-possible-enemy-textures! screen)
+    (load-all-possible-big-bullet-textures! screen)
+    (load-all-possible-item-textures! screen)
     (update! screen :renderer (stage))
     (preload-textures! screen)
     (update! screen :hub-batch (SpriteBatch.))
@@ -103,9 +133,6 @@
 
   :on-render
   render-fn)
-
-
-
 
 
 (defgame scarletto-game

@@ -15,6 +15,7 @@
                   :classifier "natives-desktop"]
                  [com.badlogicgames.gdx/gdx-platform "1.5.5"
                   :classifier "natives-desktop"]
+                 [criterium "0.4.3"]
                  [org.clojure/clojure "1.7.0-alpha5"]
                  [play-clj "0.4.6"]]
 

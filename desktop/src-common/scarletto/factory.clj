@@ -1,7 +1,10 @@
 (ns scarletto.factory
   (:require [scarletto.collide :as c]
+            [scarletto.entities]
             [play-clj.math :refer :all])
-  (:import [com.badlogic.gdx.math Vector2 CatmullRomSpline]))
+  (:import [com.badlogic.gdx.math Vector2 CatmullRomSpline]
+           [scarletto.entities CircleBullet PolygonBullet]
+           [java.lang ArrayIndexOutOfBoundsException]))
 
 (defn rect-vector
   [x y]
@@ -62,6 +65,10 @@
   [r x y vel]
   {:rot-angle 0 :radius r :x x :y y :type :circle :vel vel :graphics-type :circle :timer 0})
 
+(comment defn bullet-circle
+  [r x y vel]
+  (CircleBullet. 0 r x y :circle vel :circle 0))
+
 (defn bullet-circle-small
   [x y vel]
   (assoc (bullet-circle 10 x y vel) :color 0))
@@ -119,6 +126,20 @@
            (c/distance 0 0 (.x v) (.y v)))
          vectors))]
     {:rot-angle 0 :vectors vectors :x x :y y :vel vel :type :polygon :radius r :timer 0}))
+
+(comment defn bullet-polygon
+  "arguments: vector of Vector2, int x, int y, Vector2 vel"
+  [vectors x y vel]
+  (let
+      [r
+       (apply
+        max
+        (map
+         (fn [^Vector2 v]
+           (c/distance 0 0 (.x v) (.y v)))
+         vectors))]
+    (PolygonBullet. 0 vectors x y vel :polygon r 0)))
+
 
 (defn bullet-square
   [a x y vel]
@@ -283,9 +304,18 @@
   (let [t (f2t frame)]
     (.valueAt path (Vector2. 0 0) t)))
 
-(defn calc-point-derivative ^Vector2
+(defn calc-point-derivative-e ^Vector2
   [frame ^CatmullRomSpline path f2t]
   (if (neg? frame)
     (Vector2. 0 0)
     (let [t (f2t frame)]
-      (.derivativeAt path (Vector2. 0 0) t))))
+      (if (or
+           (> t 0.98)
+           (< t 0.02))
+        (Vector2. 0 0)
+        (.derivativeAt path (Vector2. 0 0) t)))))
+
+(defn calc-point-derivative ^Vector2
+  [frame ^CatmullRomSpline path f2t]
+  (try (calc-point-derivative-e frame path f2t)
+    (catch ArrayIndexOutOfBoundsException e (Vector2. 0 0))))

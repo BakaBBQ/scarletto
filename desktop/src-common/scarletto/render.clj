@@ -1,6 +1,7 @@
 (ns scarletto.render
   (:require [scarletto.factory :as f]
             [play-clj.core :refer :all]
+            [scarletto.consts :refer :all]
             [play-clj.g2d :refer :all])
   (:import [com.badlogic.gdx.graphics.g2d SpriteBatch Batch ParticleEffect BitmapFont TextureRegion]
            [com.badlogic.gdx.graphics Texture]
@@ -10,21 +11,18 @@
            [com.badlogic.gdx.graphics FPSLogger Color]
            [com.badlogic.gdx.graphics OrthographicCamera]
            [com.badlogic.gdx.graphics.glutils ShapeRenderer ShapeRenderer$ShapeType]))
-(defmacro defn-memo [name & body]
-  `(def ~name (memoize (fn ~body))))
-
-
 
 (defn draw-in-center-with-rotation
+  "Calling .draw with batch textureregion to render texture, with rotation"
   [batch tr x y rotation]
   (let [w (.getRegionWidth ^TextureRegion tr)
         h (.getRegionHeight ^TextureRegion tr)
         ^double rx (- x (/ w 2))
         ^double ry (- y (/ h 2))]
-    (.draw ^SpriteBatch batch ^TextureRegion tr rx ry (/ w 2) (/ h 2) w h 1 1 ^double (+ 90 rotation))))
-
+    (.draw ^SpriteBatch batch ^TextureRegion tr rx ry (/ w 2) (/ h 2) w h 1 1 ^double (+ 270 rotation))))
 
 (defn draw-in-center
+  "calling .draw to draw batch at center"
   [^SpriteBatch batch ^TextureRegion tr x y]
   (let [w (.getRegionWidth tr)
         h (.getRegionHeight tr)
@@ -153,9 +151,26 @@
 
 (defn get-bullet-row [bullet]
   (case (:graphics-type bullet)
+    :big-star 0
+    :big-circle 1
+    :big-butterfly 2
+    :big-knife 3
+    :big-oval 4
+    :scale 1
+    :ring 2
     :circle 3
+    :crystal 6
     :rice 4
     :star 10))
+
+(defn get-bullet-asset-type [bullet]
+  (case (:graphics-type bullet)
+    :big-star :textures-big
+    :big-circle :textures-big
+    :big-butterfly :textures-big
+    :big-knife :textures-big
+    :big-oval :textures-big
+    :bullet-textures))
 
 (defn get-bullet-column [bullet]
   (:color bullet))
@@ -163,7 +178,7 @@
 (defn get-bullet-texture-region-e [bullet screen]
   (let [r (get-bullet-row bullet)
         c (get-bullet-column bullet)]
-    ^TextureRegion (nth (nth (:bullet-textures screen) c) r)))
+    ^TextureRegion (nth (nth ((get-bullet-asset-type bullet) screen) c) r)))
 
 (defn get-player-texture-bounds [player]
   (let [vel (:velocity player)
@@ -298,7 +313,11 @@
                   (filter true?)) conj
             [1 2 3 4 5]))))
 
-
+(defn get-shooter-style
+  [shooter]
+  (if (:style shooter)
+    (:style shooter)
+    0))
 
 (defn render-normal-shooter
   [entity ^SpriteBatch batch ^BitmapFont font screen]
@@ -323,8 +342,7 @@
                   (neg? dx)
                   false)
         texs (:enemy-textures screen)
-        ;;;nnn (println flipped)
-        ^TextureRegion tex (nth (nth texs tindex) 0)
+        ^TextureRegion tex (nth (nth texs tindex) (get-shooter-style entity))
         nt (TextureRegion. tex)
         n (.flip nt flipped false)
         x (:x s)
@@ -337,6 +355,15 @@
   (if (:boss entity)
     (render-boss-shooter entity ^SpriteBatch batch ^BitmapFont font screen)
     (render-normal-shooter entity ^SpriteBatch batch ^BitmapFont font screen)))
+
+(defmethod render-real-entity :item
+  [entity ^SpriteBatch batch ^BitmapFont font screen]
+  (let [t (:timer entity)
+        ^TextureRegion item-tex (first (:item-textures screen))
+        rotation (if (> t 30)
+                   90
+                   (+ 90 (mod (* t 24) 360)))]
+    (draw-in-center-with-rotation batch item-tex (:x entity) (:y entity) rotation)))
 
 (defmethod render-real-entity :default [entity ^SpriteBatch batch font screen])
 
