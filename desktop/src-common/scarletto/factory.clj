@@ -1,10 +1,21 @@
 (ns scarletto.factory
   (:require [scarletto.collide :as c]
             [scarletto.entities]
-            [play-clj.math :refer :all])
+            [play-clj.math :refer :all]
+            [scarletto.config :refer :all])
   (:import [com.badlogic.gdx.math Vector2 CatmullRomSpline]
            [scarletto.entities CircleBullet PolygonBullet]
            [java.lang ArrayIndexOutOfBoundsException]))
+
+(def grid-div 12)
+(def grid-x (/ game-width grid-div))
+(def grid-y (/ game-height grid-div))
+(defn grid-at [x y] [(* grid-x x) (* grid-y y)])
+
+(defn player-dead?
+  [player]
+  (let [d (:dead player)]
+    (and d (pos? d))))
 
 (defn rect-vector
   [x y]
@@ -76,6 +87,10 @@
 (defn wait-until-all-clear
   []
   {:ngc true :wait true :type :wait})
+
+(defn explosion
+  [x y color]
+  {:type :explosion :x x :y y :color color :timer 0})
 
 (defn d-mangnitude
   "default magnitude function for item"
@@ -177,12 +192,19 @@
 
 (defn player
   [shottype subtype]
-  {:radius 2 :x ( * (/ 382 2) 1.5) :y 75 :type :player :collide false
+  {:radius 2 :x (/ game-width 2) :y 75 :type :player :collide false
    :power 400
    :focused 0
+   :dead 0
    :ngc true
+   :invincible 0
    :velocity 0
+   :lives 2
    :shottype shottype :subtype subtype :timer 0})
+
+(defn player-invincible?
+  [player]
+  (pos? (:invincible player)))
 
 (defn focused? [player]
   (let [v (:focused player)]

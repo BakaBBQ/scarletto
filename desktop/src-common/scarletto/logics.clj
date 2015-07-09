@@ -9,7 +9,11 @@
            [com.badlogic.gdx Input$Keys]
 	   [com.badlogic.gdx.math Vector2 CatmullRomSpline]))
 
+(defn tag? [e tag] (= (:tag e) tag))
+(defn type? [e type] (= (:type e) type))
+
 (defn fold-directions
+  "gives a vector of 2 elements, the first element ranges from -1 to 1 showing the x key direction, the second ranges from -1 to 1, showing the y key direction"
   []
   [(cond
      (.isKeyPressed Gdx/input (key-code :left))
@@ -27,6 +31,7 @@
      0)])
 
 (defn in-area-of-effect
+  "detects if an entity is within the visible stage"
   [e]
   (let [x (:x e)
         y (:y e)]
@@ -37,6 +42,7 @@
      (< y offset-stage-upper-bound))))
 
 (defn update-exempt-once
+  "update entities with the :exempt-once flag to toggle the flag if the flag exists"
   [e]
   (if (and (:exempt-once e) (:ngc e))
     (if (in-area-of-effect e)
@@ -45,10 +51,12 @@
     e))
 
 (defmulti update-entity
+  "main dispatch for entity update loop"
   (fn [entity entities screen]
     (:type entity)))
 
 (defn set-player-x [p x]
+  "set the player's x pos, auto corrects out of stage values"
   (let [rb offset-stage-right-bound]
     (assoc p :x
          (cond
@@ -57,6 +65,7 @@
           :else x))))
 
 (defn set-player-y [p y]
+   "set the player's y pos, auto corrects out of stage values"
   (assoc p :y
          (cond
           (< y 0) 0
@@ -64,14 +73,16 @@
           :else y)))
 
 (defn update-focused-timer
+  "alters the player's focused timer"
   [p key-pressed]
   (if key-pressed
-    (update-in p [:focused]
+    (update p :focused
                (fn [x] (min 40 (inc x))))
-    (update-in p [:focused]
+    (update p :focused
                (fn [x] (max 0 (dec x))))))
 
 (defn dec-abs [n]
+  "forces the number n to approach 0. e.g. 3 -> 2 , 2 -> 1 , -3 -> -2, 0 -> 0, 1 -> 0"
   (if (pos? n)
     (dec n)
     (if (neg? n)
@@ -79,6 +90,7 @@
       n)))
 
 (defn ensure-not-out-of-bound [lb rb n]
+  "forces the number n to be lb < n < rb, if not, changes n to the closest value"
   (if (< n lb)
     lb
     (if (> n rb)
@@ -86,17 +98,63 @@
       n)))
 
 (defn update-player-velocity
+  "alters player's velocity attribute according to the key pressed, the velocity attribute determines the player's current graphics"
   [player directions]
   (if (= (mod (:timer player) 3) 0)
     (let [dx (first directions)]
     (update-in
      (case (int dx)
       ;; if there is no movement the counter should go down
-      0 (update-in player [:velocity] dec-abs)
-      1 (update-in player [:velocity] inc)
-      -1 (update-in player [:velocity] dec))
+      0 (update player :velocity dec-abs)
+      1 (update player :velocity inc)
+      -1 (update player :velocity dec))
      [:velocity] (partial ensure-not-out-of-bound -7 7)))
     player))
+
+(defn dec-until-zero
+  [n]
+  (if (pos? n)
+    (dec n)
+    0))
+
+;; i feel like I am still using the imperitive style... state is evil
+(defn player-dead?
+  [player]
+  (let [d (:dead player)]
+    (and d (pos? d))))
+
+(defn update-player-dead
+  [player]
+  (if (:collide player)
+    (-> player
+        (assoc :dead 90)
+        (update :lives dec-until-zero))
+    (update player :dead dec-until-zero)))
+
+
+(defn update-invincible-and-dead
+  [player]
+  (if (= (:dead player) 1)
+    (assoc player :invincible invincible-time)
+    player))
+
+(defn update-dead-timer
+  [player]
+  (-> player
+      (update :dead dec-until-zero)
+      (update-invincible-and-dead)
+      (update :invincible dec-until-zero)))
+
+(defn update-player-when-movable
+  [entity offsets dirs slow-mode entities]
+  (-> entity
+      (set-player-x (+ (first offsets) (:x entity)))
+      (set-player-y (+ (last offsets) (:y entity)))
+      (update-player-velocity dirs)
+      (update-focused-timer slow-mode)
+      (c/collide-check entities)
+      (update-player-dead)
+      (update-dead-timer)))
 
 (defmethod update-entity :player [entity entities screen]
   (let [slow-mode (key-pressed? :shift-left)
@@ -105,18 +163,22 @@
         offsets (map (partial * speed-multiplyer) dirs)
         player entity
         x (:x player)
-        y (:y player)]
-    (-> entity
-        (set-player-x (+ (first offsets) x))
-        (set-player-y (+ (last offsets)  y))
-        (update-player-velocity dirs)
-        (update-focused-timer slow-mode)
-        (c/collide-check entities))))
+        y (:y player)
+        r (if-not (player-dead? entity)
+            (update-player-when-movable entity offsets dirs slow-mode entities)
+            (update-dead-timer entity))]
+    (do
+      r)))
+
+;; so let's see.. if the player is collided... then we should mark it dead... wait.. then how can we add those power items...
+
+;; the plan follows as this: mark it dead for seconds
 
 (defmethod update-entity :fps-counter [entity entities screen]
   (update-in entity [:fps] (constantly (game :fps))))
 
 (defn update-death
+  "if the entity's hp is smaller than 0, then mark it with flag :dead"
   [entity]
   (let [hp (:hp entity)]
     (if hp
@@ -126,6 +188,7 @@
       entity)))
 
 (defmulti deal-damage
+  "dispatches deal-damage according to whether the shooter is a boss or not"
   (fn [entity hp]
     (:boss entity)))
 
@@ -153,6 +216,7 @@
   (not (empty? (filter (fn [x] (and (= (:type x) :sc))) entities))))
 
 (defn update-if-boss [entity entities screen]
+  "a special method dedicated to those bosses.... wait... I do not like this"
   (if (:boss entity)
     (let [entities-sc (:sc (:entities-grouped screen))
           starting-spell-cards (filter (fn [x] (zero? (:timer x))) entities-sc)]
@@ -162,12 +226,11 @@
     entity))
 
 (defmethod update-entity :shooter [entity entities screen]
+  "main update method for shooters"
   (-> entity
       (d/update-single-shooter entities screen)
       (update-shooter-collide entities screen)
       (update-if-boss entities screen)))
-
-
 
 (defmethod update-entity :pbullet [entity entities screen]
   (let [entities-grouped (:entities-grouped screen)
@@ -197,7 +260,7 @@
 
         is-move-closer (or (< d 40) (> (:y player) 533) (:attract i))
 
-        attractive-force (min d 8)
+        attractive-force (min (* 1.5 d) 8)
 
         attract-speed (f/vector-to i player attractive-force)
 
@@ -213,18 +276,15 @@
              (.y newspeed)))
         ]
     (-> entity
-        (update-in [:x] (partial + vx))
-        (update-in [:y] (partial + vy))
-        (assoc :dead did-collide)
-        (assoc :collided did-collide)
-        (assoc :attract is-move-closer)
+        (update :x (partial + vx))
+        (update :y (partial + vy))
+        (assoc :dead did-collide :collided did-collide :attract is-move-closer)
         (update-exempt-once))))
 
 (defn update-rotation [entity]
   (let [rot (:rotation entity)]
     (if (and rot (:vectors entity))
-      (update-in entity
-                 [:vectors]
+      (update entity :vectors
                  (partial map (fn [x] (f/rotate-vector x rot))))
       entity)))
 
@@ -252,10 +312,16 @@
                    entity)
                  (if (> (:ftimer entity) 10)
                    (assoc entity :dead true :ngc false)
-                   (update-in entity [:ftimer] inc))))))
+                   (update entity :ftimer inc))))))
 
 (defmethod update-entity :sc [entity entities screen]
-      entity)
+  entity)
+
+(defmethod update-entity :explosion [entity entiteis screen]
+  (let [t (:timer entity)]
+    (if (> t 20)
+      (assoc entity :dead true)
+      entity)))
 
 (defmethod update-entity :default [entity entities screen]
   (let [^Vector2 vel (:vel entity)]
@@ -302,12 +368,11 @@
   (let [x (:x e)
         y (:y e)
         si (f/item x y :power (f/polar-vector 5 90))
-         expanded (l/expand-to si 30 3)]
+        expanded (l/expand-to si 30 3)
+        explosion [(f/explosion x y 0)]]
     (if (dead? e)
-      expanded
+      (concat expanded explosion)
       [])))
-
-
 
 (defn get-dead-aftereffects
   [alive dead]
@@ -462,7 +527,9 @@
         py (:y p)
         t (:timer p)
         pressed-shoot (key-pressed? :z)
-        can-shoot (empty? (:dialog entities-grouped))
+        can-shoot (and
+                   (empty? (:dialog entities-grouped))
+                   (not (f/player-dead? p)))
         do-shoot (and pressed-shoot can-shoot)]
     (concat entities
             (if (and do-shoot (= (mod t 6) 0))

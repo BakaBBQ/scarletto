@@ -16,3 +16,5 @@
 
 (def offset-stage-right-bound (- stage-right-bound stage-left-bound))
 (def offset-stage-upper-bound (- stage-upper-bound stage-lower-bound))
+
+(def invincible-time 180)

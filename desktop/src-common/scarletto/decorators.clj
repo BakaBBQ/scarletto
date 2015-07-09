@@ -66,19 +66,19 @@
 
 (def test-shooter
   (assoc
-              (f/bullet-shooter-w-path
-               :meow :n 200 200
-               [(Vector2. 200 200)
-                (Vector2. 400 400)
-                (Vector2. 200 200)
-                (Vector2. 400 400)
-                (Vector2. 800 800)]
-               (f/splined 800))
-            :dtag :test
-            :exempt-once true
-            :tag :test
-            :radius 12
-            :mtag nil
+      (f/bullet-shooter-w-path
+       :meow :n 200 200
+       [(Vector2. 200 200)
+        (Vector2. 400 400)
+        (Vector2. 200 200)
+        (Vector2. 400 400)
+        (Vector2. 800 800)]
+       (f/splined 800))
+    :dtag :test
+    :exempt-once true
+    :tag :test
+    :radius 12
+    :mtag nil
     :hp 10))
 
 (defn gen-shooter
@@ -90,16 +90,16 @@
         point4 (Vector2. (+ (rand 600) 240) (+ (rand 480) 240))
         t (+ 300 (rand 400))]
     (assoc
-              (f/bullet-shooter-w-path
-               :meow :n (.x point1) (.y point1)
-               [point1 point2 point3 point4]
-               (f/splined t))
-            :dtag (rand-nth [:test :test2 :test3])
-            :exempt-once true
-            :tag (rand-nth [:test :test2])
-            :radius 12
-            :mtag nil
-    :hp 20)))
+        (f/bullet-shooter-w-path
+         :meow :n (.x point1) (.y point1)
+         [point1 point2 point3 point4]
+         (f/splined t))
+      :dtag :test
+      :exempt-once true
+      :tag (rand-nth [:test :test2])
+      :radius 12
+      :mtag nil
+      :hp 5)))
 
 (comment defn insert-shooters
   [entities screen]
@@ -126,7 +126,7 @@
         a (f/vector-to s player (+ 4 (mod (:timer s) 3)))
         b (p/big-circle x y a)
         b2 (f/rotate-bullet b (.angle a))]
-    (every s 10
+    (every s 50
            (f/nway-shoot b2 10))))
 
 (defshoot :test2
@@ -137,8 +137,8 @@
         a (f/vector-to s player (+ 4 (mod (:timer s) 5)))
         b (f/bullet-circle-small x y a)
         b2 (assoc (f/rotate-bullet b (.angle a)) :color (rand 12))]
-    (every s 10
-           (f/nway-shoot b2 30))))
+    (every s 50
+           (f/nway-shoot b2 20))))
 
 (defshoot :test3
   [s entities screen]
@@ -148,7 +148,7 @@
         a (f/vector-to s player (+ 4 (mod (:timer s) 5)))
         b (f/bullet-circle-small x y a)
         b2 (f/rotate-bullet b (mod (:timer s) 360))]
-    (every s 10
+    (every s 30
            (f/nway-shoot b2 3))))
 
 (defshoot :boss
@@ -181,14 +181,16 @@
         (assoc :y (.y p)))))
 
 
+(defn normal-shooter? [e]
+  "returns whether the entity is both a shooter and a boss"
+  (and (= (:type e) :shooter) (not (:boss e))))
+
 (defn update-shooters
   [entities screen]
   (let [entities-grouped (:entities-grouped screen)
         boss (filter :boss (:shooter entities-grouped))
         b (flatten (for [e entities
-                         :when (and
-                                (= (:type e) :shooter)
-                                (not (:boss e)))]
+                         :when (normal-shooter? e)]
                      (get-new-bullets e entities screen)))
 
         spell-card-tags (map :tag (:sc entities-grouped))

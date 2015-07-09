@@ -69,7 +69,6 @@
         ^double x (:x entity)
         ^double y (:y entity)
         exp-vec (flatten (map (fn [^Vector2 v] [(+ x (.x v)) (+ y (.y v))]) vecs))]
-
     (.polygon renderer (float-array exp-vec))))
 
 (defmethod render-debug-entity :item [entity ^ShapeRenderer renderer]
@@ -124,8 +123,6 @@
 (defmulti render-real-entity
   (fn [entity ^SpriteBatch batch font screen]
     (get-render-type entity)))
-
-
 
 (defmethod render-real-entity :fps-counter [entity batch ^BitmapFont font screen]
   (.draw font batch (str "fps: " (:fps entity)) 565 0))
@@ -186,13 +183,13 @@
                   (* vel -1))
         t (:timer player)
         raw-bounds (cond
-         (pos? vel) (if (= vel 7)
-                      [(+ vel (- (quot (mod t 15) 3) 4)) 2]
-                      [vel 2])
-         (neg? vel) (if (= abs-vel 7)
-                      [(* (+ abs-vel (- (quot (mod t 15) 3) 4)) 1) 1]
-                      [(* vel -1) 1])
-         :else [(int (/ (mod t 24) 3)) 0])]
+                    (pos? vel) (if (= vel 7)
+                                 [(+ vel (- (quot (mod t 15) 3) 4)) 2]
+                                 [vel 2])
+                    (neg? vel) (if (= abs-vel 7)
+                                 [(* (+ abs-vel (- (quot (mod t 15) 3) 4)) 1) 1]
+                                 [(* vel -1) 1])
+                    :else [(int (/ (mod t 24) 3)) 0])]
     [(* 48 (first raw-bounds)) (* 72 (last raw-bounds))]))
 
 (defn get-player-texture [player screen]
@@ -243,9 +240,10 @@
       (draw-appear-effect entity batch font screen)
       (draw-pure-bullet entity batch font screen))))
 
+(defn render-player-when-dead
+  [entity ^SpriteBatch batch ^BitmapFont font screen])
 
-
-(defmethod render-real-entity :player
+(defn render-player-normal
   [entity ^SpriteBatch batch ^BitmapFont font screen]
   (draw-in-center batch (get-player-texture entity screen) (:x entity) (:y entity))
   (.setColor batch 1 1 1 (/ (:focused entity) 40.0))
@@ -262,6 +260,21 @@
                 rx (+ (.x v) px)
                 ry (+ (.y v) py)]]
     (draw-in-center-with-rotation batch (get-player-option-texture entity screen) rx ry (.angle v))))
+
+(defn render-player-when-invincible
+  ;; we need this blink effect
+  [entity ^SpriteBatch batch ^BitmapFont font screen]
+  (let [t (:timer entity)
+        rt (quot t 5)]
+    (if (even? rt)
+      (render-player-normal entity batch font screen))))
+
+(defmethod render-real-entity :player
+  [entity ^SpriteBatch batch ^BitmapFont font screen]
+  (cond
+   (f/player-dead? entity) (render-player-when-dead entity batch font screen)
+   (f/player-invincible? entity) (render-player-when-invincible entity batch font screen)
+   :default (render-player-normal entity batch font screen)))
 
 (defmethod render-real-entity :pbullet
   [entity ^SpriteBatch batch ^BitmapFont font screen]
@@ -283,7 +296,7 @@
         ^Vector2 p (f/calc-point-derivative t p m)
         dx (.x p)
         dy (.y p)
-        rt (int (/ t 3)) ;;revamped t
+        rt (quot t 3) ;;revamped t
         horz-moving? (> (Math/abs dx) 0.5)
         r (if horz-moving?
             (= (pos? dx) (pos? dir))
@@ -299,7 +312,6 @@
         ^Vector2 p (f/calc-point-derivative t p m)
         dx (.x p)]
     dx))
-
 
 (defn judge-movement
   ;; if the shooter has moved during the previous 1 tick => 1
@@ -355,6 +367,19 @@
   (if (:boss entity)
     (render-boss-shooter entity ^SpriteBatch batch ^BitmapFont font screen)
     (render-normal-shooter entity ^SpriteBatch batch ^BitmapFont font screen)))
+
+(defmethod render-real-entity :explosion
+  [entity ^SpriteBatch batch ^BitmapFont font screen]
+  (let [t (:timer entity)
+        c (:color entity)
+        explosion-textures (:explosion-textures screen)
+        ^TextureRegion tex (get explosion-textures c)
+        opacity (max (- 1 (* 0.05 t)) 0)
+        size (* t (/ 1 20) 1.8)]
+    (do
+      (.setColor batch 1 1 1 opacity)
+      (draw-in-center-with-rotation-and-zoom batch tex (:x entity) (:y entity) 0 size)
+      (.setColor batch 1 1 1 1))))
 
 (defmethod render-real-entity :item
   [entity ^SpriteBatch batch ^BitmapFont font screen]

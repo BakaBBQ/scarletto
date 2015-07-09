@@ -39,7 +39,7 @@
                    (TextureRegion. ^TextureRegion etama (* 48 i) 312 48 48))]
     (update! screen :appear-textures textures)))
 
-(defn get-big-fairy-texture [^TextureRegion etama index]
+(defn get-big-fairy-texture [^TextureRegion etama ^long index]
   (if (< index 8)
     (TextureRegion. etama (* 96 index) 576 96 96)
     (case index
@@ -62,6 +62,14 @@
                        (get-big-fairy-texture etama i)
                        (TextureRegion. ^TextureRegion etama (* 48 i) (+ (* 48 j) 384) 48 48))))]
     (update! screen :enemy-textures textures)))
+
+(defn load-all-possible-explosion-textures! [screen]
+  (let [^TextureRegion etama (:object (texture "etama2.png"))
+        textures [(TextureRegion. etama 192 24 96 96)
+                  (TextureRegion. etama 288 24 96 96)
+                  (TextureRegion. etama 0 120 96 96)
+                  (TextureRegion. etama 96 120 96 96)]]
+    (update! screen :explosion-textures textures)))
 
 (defn load-all-possible-big-bullet-textures! [screen]
   (let [^TextureRegion etama6 (:object (texture "etama6.png"))
@@ -114,6 +122,7 @@
     (load-all-possible-enemy-textures! screen)
     (load-all-possible-big-bullet-textures! screen)
     (load-all-possible-item-textures! screen)
+    (load-all-possible-explosion-textures! screen)
     (update! screen :renderer (stage))
     (preload-textures! screen)
     (update! screen :hub-batch (SpriteBatch.))

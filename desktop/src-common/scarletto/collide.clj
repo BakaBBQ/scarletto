@@ -81,11 +81,24 @@
 (defmethod bullet-collide-player? :default [player bullet]
   false)
 
-(defn collide-check
-  ;; whenever the player collides with other entities, it needs to at least do something
+(defn collide-check-raw
+  ;; whenever the player collides with other entities, it needs to at least do right...?
+  "the main method of the collision. Detects whether player intersects with other entities"
   [player all-entities]
   (let [others (rest all-entities)]
     (assoc player :collide
                (some
                    (partial bullet-collide-player? player)
                    others))))
+
+(defn player-dead?
+  "TODO do not repeat yourself"
+  [player]
+  (let [d (:dead player)]
+    (and d (pos? d))))
+
+(defn collide-check
+  [player all-entities]
+  (if (or (player-dead? player) (pos? (:invincible player)))
+    (assoc player :collide false)
+    (collide-check-raw player all-entities)))
