@@ -9,6 +9,9 @@
            [com.badlogic.gdx Input$Keys]
 	   [com.badlogic.gdx.math Vector2 CatmullRomSpline]))
 
+
+
+
 (defn tag? [e tag] (= (:tag e) tag))
 (defn type? [e type] (= (:type e) type))
 
@@ -265,15 +268,15 @@
         attract-speed (f/vector-to i player attractive-force)
 
         vx (if is-move-closer
-             (.x attract-speed)
+             (.x ^Vector2 attract-speed)
               (if (neg? magnitude)
                 0
-                (.x newspeed)))
+                (.x ^Vector2 newspeed)))
         vy (if is-move-closer
-             (.y attract-speed)
+             (.y ^Vector2 attract-speed)
              (if (neg? magnitude)
              (- 1)
-             (.y newspeed)))
+             (.y ^Vector2 newspeed)))
         ]
     (-> entity
         (update :x (partial + vx))

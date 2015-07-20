@@ -98,25 +98,23 @@
       :exempt-once true
       :tag (rand-nth [:test :test2])
       :radius 12
+      :boss true
       :mtag nil
       :hp 5)))
 
-(comment defn insert-shooters
-  [entities screen]
-  (let []
-    (case (int (:gtimer screen))
-      60 [test-shooter]
-      100 [test-shooter]
-      140 [test-shooter]
-      [])))
-
 
 ;; gen-shooter
-(defn insert-shooters
+(comment defn insert-shooters
   [entities screen]
   (if (= (mod (int (:gtimer screen)) 40) 0)
     [(gen-shooter)]
     []))
+
+(defn insert-shooters
+  [entities screen]
+  (let [^long timer (:gtimer screen)]
+    (case timer
+      [])))
 
 (defshoot :test
   [s entities screen]
@@ -125,7 +123,7 @@
         y (:y s)
         a (f/vector-to s player (+ 4 (mod (:timer s) 3)))
         b (p/big-circle x y a)
-        b2 (f/rotate-bullet b (.angle a))]
+        b2 (f/rotate-bullet b (.angle ^Vector2 a))]
     (every s 50
            (f/nway-shoot b2 10))))
 
@@ -136,7 +134,7 @@
         y (:y s)
         a (f/vector-to s player (+ 4 (mod (:timer s) 5)))
         b (f/bullet-circle-small x y a)
-        b2 (assoc (f/rotate-bullet b (.angle a)) :color (rand 12))]
+        b2 (assoc (f/rotate-bullet b (.angle ^Vector2 a)) :color (rand 12))]
     (every s 50
            (f/nway-shoot b2 20))))
 
@@ -177,8 +175,8 @@
         m (nn (:movement s))
         p (f/calc-point t p m)]
     (-> s
-        (assoc :x (.x p))
-        (assoc :y (.y p)))))
+        (assoc :x (.x ^Vector2 p))
+        (assoc :y (.y ^Vector2 p)))))
 
 
 (defn normal-shooter? [e]

@@ -1,4 +1,4 @@
-(defproject scarletto "0.0.1-SNAPSHOT"
+(defproject scarletto "0.1.0-SNAPSHOT"
   :description "bullet-hell shooter in clojure"
   :global-vars {*warn-on-reflection* true}
 
@@ -17,6 +17,7 @@
                   :classifier "natives-desktop"]
                  [criterium "0.4.3"]
                  [org.clojure/clojure "1.7.0-alpha5"]
+                 [org.clojure/core.typed "0.3.7"]
                  [play-clj "0.4.6"]]
 
   :source-paths ["src" "src-common"]

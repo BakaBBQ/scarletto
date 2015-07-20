@@ -1,7 +1,9 @@
 (ns scarletto.render
+  (:refer-clojure :exclude [atom doseq let fn defn ref dotimes defprotocol loop for])
   (:require [scarletto.factory :as f]
             [play-clj.core :refer :all]
             [scarletto.consts :refer :all]
+            [clojure.core.typed :refer :all]
             [play-clj.g2d :refer :all])
   (:import [com.badlogic.gdx.graphics.g2d SpriteBatch Batch ParticleEffect BitmapFont TextureRegion]
            [com.badlogic.gdx.graphics Texture]
@@ -9,8 +11,13 @@
            [com.badlogic.gdx.scenes.scene2d Stage]
            [com.badlogic.gdx.math Vector2]
            [com.badlogic.gdx.graphics FPSLogger Color]
-           [com.badlogic.gdx.graphics OrthographicCamera]
-           [com.badlogic.gdx.graphics.glutils ShapeRenderer ShapeRenderer$ShapeType]))
+           [com.badlogic.gdx.graphics OrthographicCamera PerspectiveCamera]
+           [com.badlogic.gdx.graphics.glutils ShapeRenderer ShapeRenderer$ShapeType]
+           [com.badlogic.gdx.graphics.g3d.decals Decal DecalBatch CameraGroupStrategy]))
+
+(defn add-decal-to-screen! [screen :- Any, decal :- Decal]
+  (let [batch ^DecalBatch (:decal-batch screen)]
+    (.add batch ^Decal decal)))
 
 (defn draw-in-center-with-rotation
   "Calling .draw with batch textureregion to render texture, with rotation"
@@ -20,6 +27,12 @@
         ^double rx (- x (/ w 2))
         ^double ry (- y (/ h 2))]
     (.draw ^SpriteBatch batch ^TextureRegion tr rx ry (/ w 2) (/ h 2) w h 1 1 ^double (+ 270 rotation))))
+
+(defn draw-on-batch
+  [batch tr x y]
+  (let [w (.getRegionWidth ^TextureRegion tr)
+        h (.getRegionHeight ^TextureRegion tr)]
+    (.draw ^SpriteBatch batch ^TextureRegion tr ^double x ^double y)))
 
 (defn draw-in-center
   "calling .draw to draw batch at center"
@@ -31,7 +44,7 @@
     (.draw batch tr rx ry)))
 
 (defn draw-in-center-with-rotation-and-zoom
-  [batch tr x y rotation zoom]
+  [batch :- SpriteBatch tr :- TextureRegion x :- Num y :- Num rotation :- Num zoom :- Num]
   (let [w (.getRegionWidth ^TextureRegion tr)
         h (.getRegionHeight ^TextureRegion tr)
         ^double rx (- x (/ w 2))
@@ -282,8 +295,7 @@
   (draw-in-center batch (get-player-bullet-texture entity screen) (:x entity) (:y entity))
   (.setColor batch 1 1 1 1))
 
-(defn render-boss-shooter
-  [entity ^SpriteBatch batch ^BitmapFont font screen])
+
 
 
 (defn is-horz-moving-at-frame-before-ticks-with-dir?
@@ -362,6 +374,41 @@
     (do
       (draw-in-center batch nt x y))))
 
+(defn render-boss-shooter
+  [entity ^SpriteBatch batch ^BitmapFont font screen]
+  (let [s entity
+        movement (judge-movement entity)
+        hexagram-tex (:hexagram screen)
+        t (:timer s)
+        p (:path s)
+        m (:movement s)
+        ^Vector2 p (f/calc-point-derivative t p m)
+        dx (.x p)
+        dy (.y p)
+        rt (quot t 3)
+        rt2 (quot t 12)
+        horz-moving? (> (Math/abs dx) 0.5)
+        flipped (if horz-moving?
+                  (neg? dx)
+                  false)
+        texs (:kaguya screen)
+        tex-y (if horz-moving? 1 2)
+        tex-x (if horz-moving?
+                (min (quot movement 12) 2)
+                (mod rt 3))
+        tex (nth (nth texs tex-x) tex-y)
+        nt (f/flip-texture tex flipped false)
+        size (+ (* (Math/sin (Math/toRadians (mod t 360))) 0.1) 1)
+        msize (* 1.6 size)
+        opacity (+ (* (Math/sin (Math/toRadians (mod t 360))) 0.2) 0.6)
+        x (:x s)
+        y (:y s)]
+    (do
+      (.setColor batch 1 1 1 opacity)
+      (draw-in-center-with-rotation-and-zoom batch hexagram-tex x y (mod (* t 3) 360) msize)
+      (.setColor batch 1 1 1 1)
+      (draw-in-center batch nt x y))))
+
 (defmethod render-real-entity :shooter
   [entity ^SpriteBatch batch ^BitmapFont font screen]
   (if (:boss entity)
@@ -397,10 +444,24 @@
 
 (defn render-real
   "the real renderer for game"
-  [{:keys [^Stage renderer font ^OrthographicCamera ortho-cam ^SpriteBatch hub-batch] :as screen} entities]
+  [{:keys [^Stage renderer ^DecalBatch decal-batch font ^OrthographicCamera ortho-cam ^SpriteBatch hub-batch] :as screen} entities]
 
   (let [^SpriteBatch batch (.getBatch renderer)]
     (do
+      (let [^PerspectiveCamera c (:3d-cam screen)
+            p (first entities)
+            t (:timer p)]
+        (do
+        (.rotate c (* (Math/sin (Math/toRadians t)) -0.1) 0 1 0)
+        (.update c)))
+      (doseq [^Decal d (:decals screen)]
+        (do
+          (if (key-pressed? :k)
+            (.translateX d -1))
+          (if (key-pressed? :l)
+            (.translateX d 1))
+          (.add decal-batch ^Decal d)))
+      (.flush decal-batch)
       (.update ortho-cam)
       (.setProjectionMatrix batch (.combined ortho-cam))
       (.begin batch)
@@ -409,5 +470,7 @@
       (.end batch)
       (.begin hub-batch)
       (.draw hub-batch ^TextureRegion (get-front-frame-texture screen) 0.0 0.0)
-      (.end hub-batch)))
+      (.end hub-batch)
+      (if (key-pressed? :o)
+        (screenshot! "screenshot.png"))))
   entities)

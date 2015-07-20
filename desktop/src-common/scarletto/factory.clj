@@ -1,9 +1,12 @@
 (ns scarletto.factory
+  (:refer-clojure :exclude [atom doseq let fn defn ref dotimes defprotocol loop for])
   (:require [scarletto.collide :as c]
             [scarletto.entities]
             [play-clj.math :refer :all]
-            [scarletto.config :refer :all])
+            [scarletto.config :refer :all]
+            [clojure.core.typed :refer :all])
   (:import [com.badlogic.gdx.math Vector2 CatmullRomSpline]
+           [com.badlogic.gdx.graphics.g2d SpriteBatch Batch ParticleEffect BitmapFont TextureRegion]
            [scarletto.entities CircleBullet PolygonBullet]
            [java.lang ArrayIndexOutOfBoundsException]))
 
@@ -12,30 +15,43 @@
 (def grid-y (/ game-height grid-div))
 (defn grid-at [x y] [(* grid-x x) (* grid-y y)])
 
+(defn pause? [screen]
+  (:pause screen))
+
 (defn player-dead?
   [player]
   (let [d (:dead player)]
     (and d (pos? d))))
 
+(defn player-can-bomb?
+  [player]
+  (let [p (:power player)]
+    (>= p 100)))
+
 (defn rect-vector
-  [x y]
+  [x :- Num, y :- Num]
   (new Vector2 x y))
 
 (defn polar-vector
-  [r theta]
+  [r :- Num, theta :- Num]
   (doto (Vector2. r 0)
     (.setAngle theta)))
 
 (defn respeed
-  [^Vector2 vec speed]
-  (let [angle (.angle vec)]
+  [v2 :- Vector2, speed :- Num]
+  (let [angle (.angle ^Vector2 v2)]
     (polar-vector speed angle)))
 
 (defn update-speed
-  [^Vector2 vec f]
-  (let [speed (.len vec)
-        angle (.angle vec)]
+  [v2 :- Vector2, f :- (Fn [Num -> Num])]
+  (let [speed (.len ^Vector2 v2)
+        angle (.angle ^Vector2 v2)]
     (polar-vector (f speed) angle)))
+
+(defn flip-texture [t :- TextureRegion b1 :- Boolean b2 :- Boolean]
+  (let [nt (TextureRegion. ^TextureRegion t)
+        flipped (.flip nt b1 b2)]
+    nt))
 
 (defn vector-between
   [a b]
@@ -50,8 +66,8 @@
   (respeed (vector-between a b) speed))
 
 (defn rotate-vector
-  [^Vector2 vector angle]
-  (doto (Vector2. vector)
+  [v2 :- Vector2, angle :- Num]
+  (doto (Vector2. v2)
     (.rotate angle)))
 
 (defn vector-len
