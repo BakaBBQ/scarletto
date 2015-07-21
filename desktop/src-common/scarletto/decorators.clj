@@ -98,9 +98,8 @@
       :exempt-once true
       :tag (rand-nth [:test :test2])
       :radius 12
-      :boss true
       :mtag nil
-      :hp 5)))
+      :hp 500)))
 
 
 ;; gen-shooter
@@ -108,13 +107,14 @@
   [entities screen]
   (if (= (mod (int (:gtimer screen)) 40) 0)
     [(gen-shooter)]
-    []))
+    [(f/particle-effect (:maple-green screen) 100 100)]))
 
 (defn insert-shooters
   [entities screen]
   (let [^long timer (:gtimer screen)]
     (case timer
       60 [(f/stage-text :3c)]
+      20 [(gen-shooter) (gen-shooter) (gen-shooter) (gen-shooter) (gen-shooter) (gen-shooter)]
       [])))
 
 (defshoot :test
@@ -125,7 +125,7 @@
         a (f/vector-to s player (+ 4 (mod (:timer s) 3)))
         b (p/big-circle x y a)
         b2 (f/rotate-bullet b (.angle ^Vector2 a))]
-    (every s 50
+    (every s 500
            (f/nway-shoot b2 10))))
 
 (defshoot :test2
@@ -136,7 +136,7 @@
         a (f/vector-to s player (+ 4 (mod (:timer s) 5)))
         b (f/bullet-circle-small x y a)
         b2 (assoc (f/rotate-bullet b (.angle ^Vector2 a)) :color (rand 12))]
-    (every s 50
+    (every s 500
            (f/nway-shoot b2 20))))
 
 (defshoot :test3

@@ -9,7 +9,8 @@
             [scarletto.font :refer :all]
             [scarletto.config :refer :all]
             [scarletto.prologue :as p]
-            [scarletto.factory :as f])
+            [scarletto.factory :as f]
+            [scarletto.particles :as pt])
   (:import [com.badlogic.gdx.graphics.g2d SpriteBatch Batch ParticleEffect TextureRegion]
            [com.badlogic.gdx.graphics Texture PerspectiveCamera Camera]
            [com.badlogic.gdx Gdx]
@@ -136,7 +137,7 @@
                               conj x))]
     (-> entities
         (trans-fn)
-        (l/clean-entities)
+        (l/clean-entities screen)
         (l/update-player-bullets screen)
         (l/update-shooters screen)
         (choose-renderer-and-render screen))))
@@ -191,6 +192,7 @@
   (fn [screen entities]
     (update! screen :my-tex (TextureRegion. ^TextureRegion (:object (texture "etama.png")) 0 96 24 24))
     (load-all-possible-bullet-textures! screen)
+    (pt/load-all-particle-pools! screen)
     (load-all-possible-bullet-appear-textures! screen)
     (load-all-possible-enemy-textures! screen)
     (load-all-possible-big-bullet-textures! screen)
@@ -200,6 +202,9 @@
     (load-kaguya-textures! screen)
     (update! screen :renderer (stage))
     (update! screen :pause false)
+    (update! screen :pe (doto (:object (particle-effect "maple-green.pt"))
+                          (.setPosition 300 300)
+                          (.start)))
 
     (preload-textures! screen)
     (update! screen :hub-batch (SpriteBatch.))

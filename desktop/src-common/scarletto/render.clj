@@ -13,7 +13,8 @@
            [com.badlogic.gdx.graphics FPSLogger Color]
            [com.badlogic.gdx.graphics OrthographicCamera PerspectiveCamera]
            [com.badlogic.gdx.graphics.glutils ShapeRenderer ShapeRenderer$ShapeType]
-           [com.badlogic.gdx.graphics.g3d.decals Decal DecalBatch CameraGroupStrategy]))
+           [com.badlogic.gdx.graphics.g3d.decals Decal DecalBatch CameraGroupStrategy]
+           [com.badlogic.gdx.graphics.g2d ParticleEffectPool ParticleEffect ParticleEffectPool$PooledEffect]))
 
 (defn add-decal-to-screen! [screen :- Any, decal :- Decal]
   (let [batch ^DecalBatch (:decal-batch screen)]
@@ -456,6 +457,13 @@
       (draw-in-center-with-rotation-and-zoom batch tex (:x entity) (:y entity) 0 size)
       (.setColor batch 1 1 1 1))))
 
+(defmethod render-real-entity :particle
+  [entity ^SpriteBatch batch ^BitmapFont font screen]
+  (let [^ParticleEffectPool$PooledEffect p (:object entity)
+        dtime (.getDeltaTime Gdx/graphics)]
+    (do
+      (.draw p batch dtime))))
+
 (defmethod render-real-entity :item
   [entity ^SpriteBatch batch ^BitmapFont font screen]
   (let [t (:timer entity)
@@ -501,6 +509,7 @@
       (.end batch)
       (.begin hub-batch)
       (.draw hub-batch ^TextureRegion (get-front-frame-texture screen) 0.0 0.0)
+
       (.end hub-batch)
       (if (key-pressed? :o)
         (screenshot! "screenshot.png"))))

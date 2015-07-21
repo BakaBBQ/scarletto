@@ -8,7 +8,8 @@
   (:import [com.badlogic.gdx.math Vector2 CatmullRomSpline]
            [com.badlogic.gdx.graphics.g2d SpriteBatch Batch ParticleEffect BitmapFont TextureRegion]
            [scarletto.entities CircleBullet PolygonBullet]
-           [java.lang ArrayIndexOutOfBoundsException]))
+           [java.lang ArrayIndexOutOfBoundsException]
+           [com.badlogic.gdx.graphics.g2d ParticleEffectPool ParticleEffect ParticleEffectPool$PooledEffect]))
 
 (def grid-div 12)
 (def grid-x (/ game-width grid-div))
@@ -55,6 +56,11 @@
 
 (defn stage-text [index :- Sym]
   {:timer 0 :index index :type :stage-text :ngc true})
+
+(defn particle-effect [particle-pool x y]
+  (let [e (doto ^ParticleEffectPool$PooledEffect (.obtain ^ParticleEffectPool particle-pool)
+            (.setPosition x y))]
+    {:timer 0 :type :particle :ngc true :object e}))
 
 (defn vector-between
   [a b]

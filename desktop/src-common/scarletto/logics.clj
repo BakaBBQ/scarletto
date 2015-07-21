@@ -7,8 +7,8 @@
             [scarletto.lifted :as l])
   (:import [com.badlogic.gdx Gdx]
            [com.badlogic.gdx Input$Keys]
-	   [com.badlogic.gdx.math Vector2 CatmullRomSpline]))
-
+           [com.badlogic.gdx.math Vector2 CatmullRomSpline]
+           [com.badlogic.gdx.graphics.g2d ParticleEffectPool ParticleEffect ParticleEffectPool$PooledEffect]))
 
 
 
@@ -243,7 +243,7 @@
                      all-shooters)
         ^Vector2 vel (:vel entity)]
     (if is-collide
-       (assoc entity :dead true)
+       (assoc entity :dead true :ishit true)
        (-> entity
           (update-in [:x] (partial + (.x vel)))
           (update-in [:y] (partial + (.y vel)))))))
@@ -329,6 +329,15 @@
 (defmethod update-entity :stage-text [entity entities screen]
   entity)
 
+(defmethod update-entity :particle [entity entities screen]
+  (let [^ParticleEffect p (doto (:object entity))]
+    (do
+      (if (or (.isComplete p))
+        (do
+          (.free p)
+          (assoc entity :dead true :ngc false))
+        entity))))
+
 (defmethod update-entity :default [entity entities screen]
   (let [^Vector2 vel (:vel entity)]
     (-> entity
@@ -362,15 +371,21 @@
                 (+ x amt)))))
 
 (defmulti get-dead-entities-effect
-  :dtag)
+  (fn [e screen] (:dtag e)))
 
-(defmethod get-dead-entities-effect :default [e]
+(defmethod get-dead-entities-effect :default [e screen]
   [])
+
+(defmethod get-dead-entities-effect :frog [e screen]
+  (if (:ishit e)
+     [(f/particle-effect (:frog screen) (:x e) (:y e))
+     (f/particle-effect (:sanae-hit-maple screen) (:x e) (:y e))]
+    []))
 
 (defn dead? [e]
   (<= (:hp e) 0))
 
-(defmethod get-dead-entities-effect :test [e]
+(defmethod get-dead-entities-effect :test [e screen]
   (let [x (:x e)
         y (:y e)
         si (f/item x y :power (f/polar-vector 5 90))
@@ -381,7 +396,7 @@
       [])))
 
 (defn get-dead-aftereffects
-  [alive dead]
+  [alive dead screen]
   (let [
         items (filter (fn [x] (= (:type x) :item)) dead)
         items-grouped (group-by :tag items)
@@ -394,12 +409,12 @@
 
         e-sideeffects (flatten
                        (for [e dead]
-                        (get-dead-entities-effect e)))]
+                        (get-dead-entities-effect e screen)))]
     (concat player-replaced e-sideeffects)))
 
 (defn clean-entities
   "clean those entities that fly out of screen"
-  [entities]
+  [entities screen]
   (let [
         f (comp not
                 (fn [e]
@@ -424,7 +439,7 @@
         alive (get grouped true)
         dead (get grouped false)
 
-        r (get-dead-aftereffects alive dead)
+        r (get-dead-aftereffects alive dead screen)
         ]
     r))
 
@@ -518,7 +533,8 @@
                        (+ (rand (- 60 f)) 60 (/ f 2)))
         direction (+ (rand 60) 60)
         bullet-fn (fn []
-                    (f/player-bullet 2 rx ry (f/polar-vector (+ (rand 4) 9) (direction-fn)) 2))]
+
+                    (assoc (f/player-bullet 2 rx ry (f/polar-vector (+ (rand 4) 9) (direction-fn)) 2) :dtag :frog))]
     [(bullet-fn) (bullet-fn) (bullet-fn)]))
 
 (defn get-player-option-bullets
@@ -581,7 +597,7 @@
   (fn [x]
     (-> x
       (update-individuals screen)
-      (clean-entities)
+      (clean-entities screen)
       (update-player-bullets screen))))
 
 (defn update-shooters
