@@ -53,6 +53,9 @@
         flipped (.flip nt b1 b2)]
     nt))
 
+(defn stage-text [index :- Sym]
+  {:timer 0 :index index :type :stage-text :ngc true})
+
 (defn vector-between
   [a b]
   (let [x1 (:x a)
@@ -200,7 +203,7 @@
 (defn player-bullet
   [r x y vel dmg]
   {:radius r :x x :y y :type :pbullet :vel vel :dmg dmg
-   :gc-down -50})
+   :gc-down -50 :timer 0})
 
 (defn single-dialog
   [s]
@@ -226,7 +229,8 @@
   (let [v (:focused player)]
     (= v 40)))
 
-(defn get-player-option-pos
+(comment defn get-player-option-pos
+  ;; the old reimu option poses...
   "options are functions relative to player's power and timer"
   [player]
   (if (> 100 (:power player))
@@ -243,6 +247,32 @@
 
           angles  (for [i (range option-cnt)]
                     (+ offset (* i div-angle)))
+          vectors (map (fn [theta] (polar-vector dis theta)) angles)]
+      vectors)))
+
+(defn get-player-option-pos
+  ;; sanae option poses
+  "options are functions relative to player's power and timer"
+  [player]
+  (if (> 100 (:power player))
+    []
+    (let [focused (:focused player)
+          dis (- 60 (* 30 (/ focused 20)))
+          power (:power player)
+          option-cnt (quot power 100)
+          timer (:timer player)
+
+          div-angle (/ 360 option-cnt)
+
+          offset 0
+
+          angles  (for [i (range option-cnt)]
+                    (+ offset (* i div-angle)))
+          angles (case option-cnt
+                   1 [270]
+                   2 [315 225]
+                   3 [315 225 90]
+                   4 [315 225 0 180])
           vectors (map (fn [theta] (polar-vector dis theta)) angles)]
       vectors)))
 

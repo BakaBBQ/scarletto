@@ -9,7 +9,7 @@
            [com.badlogic.gdx.graphics Texture]
            [com.badlogic.gdx Gdx]
            [com.badlogic.gdx.scenes.scene2d Stage]
-           [com.badlogic.gdx.math Vector2]
+           [com.badlogic.gdx.math Vector2 Vector3]
            [com.badlogic.gdx.graphics FPSLogger Color]
            [com.badlogic.gdx.graphics OrthographicCamera PerspectiveCamera]
            [com.badlogic.gdx.graphics.glutils ShapeRenderer ShapeRenderer$ShapeType]
@@ -138,7 +138,7 @@
     (get-render-type entity)))
 
 (defmethod render-real-entity :fps-counter [entity batch ^BitmapFont font screen]
-  (.draw font batch (str "fps: " (:fps entity)) 565 0))
+  (.draw font batch (str "fps: " (:fps entity)) 765 0))
 
 (defmethod render-real-entity :dialog
   [entity ^SpriteBatch batch ^BitmapFont font screen]
@@ -253,6 +253,31 @@
       (draw-appear-effect entity batch font screen)
       (draw-pure-bullet entity batch font screen))))
 
+(defmethod render-real-entity :stage-text
+  [entity ^SpriteBatch batch ^BitmapFont font screen]
+  (let [
+        t (:timer entity)
+        index (:index entity)
+
+        textures-blah (:3c (:stage-textures screen))
+        stage-name-tex (nth textures-blah 0)
+        stage-sub-tex1 (nth textures-blah 1)
+        stage-sub-tex2 (nth textures-blah 2)
+
+        stage-name-y 0
+        stage-name-x 0
+        opacity (if (> t 60)
+                  (if (> t 240)
+                    0
+                    1)
+                  (* (/ 1 60) t))]
+    (do
+      (.setColor batch 1 1 1 opacity)
+      (draw-on-batch batch ^TextureRegion stage-name-tex stage-name-x stage-name-y)
+      (draw-on-batch batch ^TextureRegion stage-sub-tex1 stage-name-x stage-name-y)
+      (draw-on-batch batch ^TextureRegion stage-sub-tex2 stage-name-x stage-name-y)
+      (.setColor batch 1 1 1 1))))
+
 (defn render-player-when-dead
   [entity ^SpriteBatch batch ^BitmapFont font screen])
 
@@ -271,8 +296,10 @@
           :let [px (:x entity)
                 py (:y entity)
                 rx (+ (.x v) px)
-                ry (+ (.y v) py)]]
-    (draw-in-center-with-rotation batch (get-player-option-texture entity screen) rx ry (.angle v))))
+                ry (+ (.y v) py)
+                t (:timer entity)
+                angle (mod (* 2 t) 360)]]
+    (draw-in-center-with-rotation batch (get-player-option-texture entity screen) rx ry angle)))
 
 (defn render-player-when-invincible
   ;; we need this blink effect
@@ -291,11 +318,12 @@
 
 (defmethod render-real-entity :pbullet
   [entity ^SpriteBatch batch ^BitmapFont font screen]
-  (.setColor batch 1 1 1 0.6)
-  (draw-in-center batch (get-player-bullet-texture entity screen) (:x entity) (:y entity))
-  (.setColor batch 1 1 1 1))
-
-
+  (let [t (:timer entity)
+        opacity (min (* 0.1 t) 1)]
+    (do
+      (.setColor batch 1 1 1 (* 0.6 opacity))
+      (draw-in-center-with-rotation batch (get-player-bullet-texture entity screen) (:x entity) (:y entity) (.angle ^Vector2 (:vel entity)))
+      (.setColor batch 1 1 1 1))))
 
 
 (defn is-horz-moving-at-frame-before-ticks-with-dir?
@@ -450,10 +478,13 @@
     (do
       (let [^PerspectiveCamera c (:3d-cam screen)
             p (first entities)
-            t (:timer p)]
+            t (:timer p)
+            x (+ (mod (* 2 t) 512) 512)
+            ^Vector3 pos (.position c)]
         (do
-        (.rotate c (* (Math/sin (Math/toRadians t)) -0.1) 0 1 0)
-        (.update c)))
+          (.rotate c (* (Math/sin (Math/toRadians t)) -0.1) 0 1 0)
+          (set! (.x pos) x)
+          (.update c)))
       (doseq [^Decal d (:decals screen)]
         (do
           (if (key-pressed? :k)

@@ -80,7 +80,7 @@
   [p key-pressed]
   (if key-pressed
     (update p :focused
-               (fn [x] (min 40 (inc x))))
+               (fn [x] (min 20 (inc x))))
     (update p :focused
                (fn [x] (max 0 (dec x))))))
 
@@ -326,6 +326,9 @@
       (assoc entity :dead true)
       entity)))
 
+(defmethod update-entity :stage-text [entity entities screen]
+  entity)
+
 (defmethod update-entity :default [entity entities screen]
   (let [^Vector2 vel (:vel entity)]
     (-> entity
@@ -505,14 +508,25 @@
   (let [px (:x p)
         py (:y p)
         rx (+ px ox)
-        ry (+ py oy)]
-    (f/player-bullet 4 rx ry (f/polar-vector 18 90) 2)))
+        ry (+ py oy)
+        f (:focused p)
+        focused? (= (:focused p) 20)
+        possible-directions [(+ 80 f), (- 110 f)]
+        t (:timer p)
+        rt (/ t 6)
+        direction-fn (fn []
+                       (+ (rand (- 60 f)) 60 (/ f 2)))
+        direction (+ (rand 60) 60)
+        bullet-fn (fn []
+                    (f/player-bullet 2 rx ry (f/polar-vector (+ (rand 4) 9) (direction-fn)) 2))]
+    [(bullet-fn) (bullet-fn) (bullet-fn)]))
 
 (defn get-player-option-bullets
   [p]
   (let [option-pos (f/get-player-option-pos p)]
-    (map (fn [^Vector2 v] (get-single-option-bullets p (.x v) (.y v)))
-         option-pos)))
+    (flatten
+     (map (fn [^Vector2 v] (get-single-option-bullets p (.x v) (.y v)))
+         option-pos))))
 
 (defn get-player-bullets
   [p]
@@ -535,10 +549,10 @@
                    (not (f/player-dead? p)))
         do-shoot (and pressed-shoot can-shoot)]
     (concat entities
-            (if (and do-shoot (= (mod t 6) 0))
+            (if (and do-shoot (= (mod t 4) 0))
               (get-player-bullets p)
               [])
-            (if (and do-shoot (= (mod t 4) 0))
+            (if (and do-shoot (= (mod t 6) 0))
               (get-player-option-bullets p)
               []))))
 

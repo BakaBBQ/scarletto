@@ -114,6 +114,7 @@
   [entities screen]
   (let [^long timer (:gtimer screen)]
     (case timer
+      60 [(f/stage-text :3c)]
       [])))
 
 (defshoot :test

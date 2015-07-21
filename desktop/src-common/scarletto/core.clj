@@ -25,6 +25,8 @@
 (defn pause! [screen]
   (update! screen :pause true))
 
+(defn raw-tex [st]
+  (:object (texture st)))
 
 
 (defn new-tr ^TextureRegion [src :- TextureRegion x :- Num y :- Num w :- Num h :- Num]
@@ -99,12 +101,18 @@
                      (new-tr em2 (* 120 i) (* 120 j) 120 120)))]
     (update! screen :kaguya textures)))
 
+
+
 (defn preload-textures! [screen]
   (update! screen :player-texture (:object (texture "pl02.png")))
   (update! screen :etama2 (:object (texture "etama2.png")))
   (update! screen :front-texture (:object (texture "front.png")))
-  (update! screen :reimu-shot2 (:object (texture "reimu-shot2.png")))
-  (update! screen :paper (new-tr ^TextureRegion (:object (texture "pl02.png")) 0 216 24 24))
+  (let [
+        texs [(raw-tex "stage-3c-name.png") (raw-tex "stage-3c-txt1.png") (raw-tex "stage-3c-txt2.png")]]
+    (update! screen :stage-textures {:3c texs}))
+
+  (update! screen :reimu-shot2 (new-tr (raw-tex "sanae-shots.png") 192 240 24 24))
+  (update! screen :paper (new-tr (raw-tex "sanae-shots.png") 216 240 48 48))
   (update! screen :option (new-tr ^TextureRegion (:object (texture "pl02.png")) 144 216 24 24))
   (update! screen :hexagram (new-tr ^TextureRegion (:object (texture "etama2.png")) 192 120 192 192)))
 
@@ -136,8 +144,8 @@
 
 (defn game-background-camera [screen]
   (let [cam (doto (PerspectiveCamera. 150 (width screen) (height screen))
-              (.translate 0 50 256)
-              (.lookAt  256 50 256)
+              (.translate 512 50 256)
+              (.lookAt  768 50 256)
               (.rotate  -0.1 0 1 0))]
     (do
       (update! screen :3d-cam cam)
