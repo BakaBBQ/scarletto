@@ -244,7 +244,7 @@
         x (:x entity)
         y (:y entity)
         t (:timer entity)
-        zoom (* 0.6 (- 1 (/ t 20)))]
+        zoom (* 1.2 (- 1 (/ t 10)))]
     (draw-in-center-with-rotation-and-zoom batch etex x y (:rot-angle entity) zoom)))
 
 (defmethod render-real-entity :bullet
@@ -428,7 +428,7 @@
         tex (nth (nth texs tex-x) tex-y)
         nt (f/flip-texture tex flipped false)
         size (+ (* (Math/sin (Math/toRadians (mod t 360))) 0.1) 1)
-        msize (* 1.6 size)
+        msize (* 0.8 size)
         opacity (+ (* (Math/sin (Math/toRadians (mod t 360))) 0.2) 0.6)
         x (:x s)
         y (:y s)]
@@ -436,6 +436,8 @@
       (.setColor batch 1 1 1 opacity)
       (draw-in-center-with-rotation-and-zoom batch hexagram-tex x y (mod (* t 3) 360) msize)
       (.setColor batch 1 1 1 1)
+      (.draw (doto (:flame-effect screen)
+               (.setPosition x (- y 0))) batch (.getDeltaTime Gdx/graphics))
       (draw-in-center batch nt x y))))
 
 (defmethod render-real-entity :shooter
@@ -467,11 +469,20 @@
 (defmethod render-real-entity :item
   [entity ^SpriteBatch batch ^BitmapFont font screen]
   (let [t (:timer entity)
-        ^TextureRegion item-tex (first (:item-textures screen))
+        index (case (:tag entity)
+                :power 0
+                :score 1
+                :big-p 3
+                :shard 7)
+        ^TextureRegion item-tex (nth (:item-textures screen) index)
         rotation (if (> t 30)
                    90
-                   (+ 90 (mod (* t 24) 360)))]
-    (draw-in-center-with-rotation batch item-tex (:x entity) (:y entity) rotation)))
+                   (+ 90 (mod (* t 24) 360)))
+        opacity (if (= (:tag entity) :shard) 0.5 1)]
+    (do
+      (.setColor batch 1 1 1 opacity)
+      (draw-in-center-with-rotation batch item-tex (:x entity) (:y entity) rotation)
+      (.setColor batch 1 1 1 1))))
 
 (defmethod render-real-entity :default [entity ^SpriteBatch batch font screen])
 
@@ -508,8 +519,9 @@
         (render-real-entity entity batch font screen))
       (.end batch)
       (.begin hub-batch)
+      (let [^BitmapFont font (:pron-font screen)]
+        (.draw font hub-batch (format "%010d" (:score (first entities))) 60 50))
       (.draw hub-batch ^TextureRegion (get-front-frame-texture screen) 0.0 0.0)
-
       (.end hub-batch)
       (if (key-pressed? :o)
         (screenshot! "screenshot.png"))))

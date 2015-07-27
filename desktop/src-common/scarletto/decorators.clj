@@ -4,6 +4,16 @@
             [scarletto.lifted :refer :all])
   (:import [com.badlogic.gdx.math Vector2]))
 
+(declare gen-shooter)
+
+(defn insert-shooters
+  [entities screen]
+  (let [^long timer (:gtimer screen)]
+    (case timer
+      60 [(f/stage-text :3c)]
+      20 [(gen-shooter)]
+      [])))
+
 (defmulti get-new-bullets
   (fn [s entities screen]
     (:tag s)))
@@ -84,7 +94,7 @@
 (defn gen-shooter
   []
   (let [
-        point1 (Vector2. (+ (rand 600) 240) (+ (rand 480) 240))
+        point1 (Vector2. (+ 240) (+ 240))
         point2 (Vector2. (+ (rand 600) 240) (+ (rand 480) 240))
         point3 (Vector2. (+ (rand 600) 240) (+ (rand 480) 240))
         point4 (Vector2. (+ (rand 600) 240) (+ (rand 480) 240))
@@ -98,8 +108,8 @@
       :exempt-once true
       :tag (rand-nth [:test :test2])
       :radius 12
-      :mtag nil
-      :hp 500)))
+      :mtag :test
+      :hp 5)))
 
 
 ;; gen-shooter
@@ -109,23 +119,16 @@
     [(gen-shooter)]
     [(f/particle-effect (:maple-green screen) 100 100)]))
 
-(defn insert-shooters
-  [entities screen]
-  (let [^long timer (:gtimer screen)]
-    (case timer
-      60 [(f/stage-text :3c)]
-      20 [(gen-shooter) (gen-shooter) (gen-shooter) (gen-shooter) (gen-shooter) (gen-shooter)]
-      [])))
 
 (defshoot :test
   [s entities screen]
   (let [player (first entities)
         x (:x s)
         y (:y s)
-        a (f/vector-to s player (+ 4 (mod (:timer s) 3)))
-        b (p/big-circle x y a)
+        a (f/vector-to s player 4)
+        b (p/ring x y a)
         b2 (f/rotate-bullet b (.angle ^Vector2 a))]
-    (every s 500
+    (every s 5
            (f/nway-shoot b2 10))))
 
 (defshoot :test2
@@ -133,10 +136,10 @@
   (let [player (first entities)
         x (:x s)
         y (:y s)
-        a (f/vector-to s player (+ 4 (mod (:timer s) 5)))
-        b (f/bullet-circle-small x y a)
-        b2 (assoc (f/rotate-bullet b (.angle ^Vector2 a)) :color (rand 12))]
-    (every s 500
+        a (f/vector-to s player 4)
+        b (p/circle x y a)
+        b2 (assoc (f/rotate-bullet b (.angle ^Vector2 a)) :color 0)]
+    (every s 20
            (f/nway-shoot b2 20))))
 
 (defshoot :test3
@@ -156,8 +159,7 @@
 
 (defmovement :test
   [s entities screen]
-  (-> s
-      (update-in [:x] inc)))
+  s)
 
 (defmovement :n
   [s entities screen]

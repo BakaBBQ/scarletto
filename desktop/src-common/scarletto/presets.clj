@@ -8,11 +8,11 @@
 
 (defn ring
   [x y vel]
-  (assoc (bullet-circle 9 x y vel) :graphics-type :ring :color 0))
+  (assoc (bullet-circle 8 x y vel) :graphics-type :ring :color 0))
 
 (defn circle
   [x y vel]
-  (assoc (bullet-circle 10 x y vel) :graphics-type :circle :color 0))
+  (assoc (bullet-circle 9 x y vel) :graphics-type :circle :color 0))
 
 (defn big-circle
   [x y vel]

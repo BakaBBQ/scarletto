@@ -26,8 +26,11 @@
 
 (defn player-can-bomb?
   [player]
-  (let [p (:power player)]
-    (>= p 100)))
+  (let [p (:power player)
+        bcd (:bomb-cd player)]
+    (and
+     (>= p 100)
+     (== bcd 0))))
 
 (defn rect-vector
   [x :- Num, y :- Num]
@@ -225,6 +228,8 @@
    :invincible 0
    :velocity 0
    :lives 2
+   :bomb-cd 0
+   :score 0
    :shottype shottype :subtype subtype :timer 0})
 
 (defn player-invincible?

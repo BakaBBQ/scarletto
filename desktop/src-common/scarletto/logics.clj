@@ -11,9 +11,18 @@
            [com.badlogic.gdx.graphics.g2d ParticleEffectPool ParticleEffect ParticleEffectPool$PooledEffect]))
 
 
+(defn bullet? [e] (case (:type e)
+                    :circle true
+                    :polygon true
+                    false))
 
 (defn tag? [e tag] (= (:tag e) tag))
-(defn type? [e type] (= (:type e) type))
+(defn type? [e t] (= (:type e) t))
+
+(defn pos- [a b] (max (- a b) 0))
+(defn round-to-nearest [a b] (* b (Math/round (/ a b))))
+(defn power-dropped [pl] (let [p (:power pl)]
+                           (max 225 (+ 225 (round-to-nearest (/ p 5) 5)))))
 
 (defn fold-directions
   "gives a vector of 2 elements, the first element ranges from -1 to 1 showing the x key direction, the second ranges from -1 to 1, showing the y key direction"
@@ -43,6 +52,20 @@
      (> y 0)
      (< x offset-stage-right-bound)
      (< y offset-stage-upper-bound))))
+
+(defn player-bombed? [player]
+  (and (key-pressed? :x) (f/player-can-bomb? player)))
+
+
+(declare dec-until-zero)
+(defn update-player-bomb [player]
+  (update-in
+   (if (player-bombed? player)
+    (-> player
+        (update-in [:power] - 100)
+        (assoc :bomb-cd 180))
+     player)
+   [:bomb-cd] dec-until-zero))
 
 (defn update-exempt-once
   "update entities with the :exempt-once flag to toggle the flag if the flag exists"
@@ -157,7 +180,8 @@
       (update-focused-timer slow-mode)
       (c/collide-check entities)
       (update-player-dead)
-      (update-dead-timer)))
+      (update-dead-timer)
+      (update-player-bomb)))
 
 (defmethod update-entity :player [entity entities screen]
   (let [slow-mode (key-pressed? :shift-left)
@@ -257,13 +281,17 @@
         magnitude (magnitude-w-t t)
         ^Vector2 newspeed (f/update-speed (:vel entity) (partial * magnitude))
 
+
+        can-get-item (complement f/player-dead?)
         player (first entities)
         d  (c/distance (:x entity) (:y entity) (:x player) (:y player))
-        did-collide (< d 3.5)
+        did-collide (and (< d 3.5) (can-get-item player))
 
-        is-move-closer (or (< d 40) (> (:y player) 533) (:attract i))
+        is-move-closer (and
+                        (or (< d 40) (> (:y player) 533) (:attract i) (tag? entity :shard))
+                        (can-get-item player))
 
-        attractive-force (min (* 1.5 d) 8)
+        attractive-force (min (* 10 d) 8)
 
         attract-speed (f/vector-to i player attractive-force)
 
@@ -275,9 +303,8 @@
         vy (if is-move-closer
              (.y ^Vector2 attract-speed)
              (if (neg? magnitude)
-             (- 1)
-             (.y ^Vector2 newspeed)))
-        ]
+               (- 2)
+               (.y ^Vector2 newspeed)))]
     (-> entity
         (update :x (partial + vx))
         (update :y (partial + vy))
@@ -338,12 +365,18 @@
           (assoc entity :dead true :ngc false))
         entity))))
 
+(defn update-bullet-on-player-death [e entities screen]
+  (if-not (= (:dead (first entities)) 89)
+    e
+    (f/item (:x e) (:y e) :shard (f/rect-vector 0 0))))
+
 (defmethod update-entity :default [entity entities screen]
   (let [^Vector2 vel (:vel entity)]
     (-> entity
-      (update :x + (.x vel))
-      (update :y + (.y vel))
-      (update-rotation))))
+        (update :x + (.x vel))
+        (update :y + (.y vel))
+        (update-bullet-on-player-death entities screen)
+        (update-rotation))))
 
 (defmulti update-entity-input
   (fn [screen entity]
@@ -370,6 +403,9 @@
                 400
                 (+ x amt)))))
 
+(defn add-score [player amnt]
+  (update player :score + amnt))
+
 (defmulti get-dead-entities-effect
   (fn [e screen] (:dtag e)))
 
@@ -388,7 +424,7 @@
 (defmethod get-dead-entities-effect :test [e screen]
   (let [x (:x e)
         y (:y e)
-        si (f/item x y :power (f/polar-vector 5 90))
+        si (f/item x y :score (f/polar-vector 5 90))
         expanded (l/expand-to si 30 3)
         explosion [(f/explosion x y 0)]]
     (if (dead? e)
@@ -401,9 +437,20 @@
         items (filter (fn [x] (= (:type x) :item)) dead)
         items-grouped (group-by :tag items)
         poweritems (:power items-grouped)
+        scoreitems (:score items-grouped)
         p (first alive)
+
+        score-accumulation (fn [y-pos]
+                             (if (> y-pos 533)
+                               500
+                               (int (- 500 (* y-pos (/ 400 533))))))
+        scores (map score-accumulation (map :y scoreitems))
+
         power-accumulation (* 5 (count poweritems))
-        powered-up-player (add-power p power-accumulation)
+        score-accumulation (apply + scores)
+        powered-up-player (-> p
+                              (add-score score-accumulation)
+                              (add-power power-accumulation))
 
         player-replaced (assoc alive 0 powered-up-player)
 

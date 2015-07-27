@@ -6,19 +6,21 @@
             [play-clj.g2d :refer :all]
             [scarletto.render :as r]
             [scarletto.logics :as l]
+            [scarletto.title :as t]
             [scarletto.font :refer :all]
             [scarletto.config :refer :all]
             [scarletto.prologue :as p]
             [scarletto.factory :as f]
             [scarletto.particles :as pt])
-  (:import [com.badlogic.gdx.graphics.g2d SpriteBatch Batch ParticleEffect TextureRegion]
+  (:import [com.badlogic.gdx.graphics.g2d SpriteBatch Batch ParticleEffect TextureRegion BitmapFont]
            [com.badlogic.gdx.graphics Texture PerspectiveCamera Camera]
            [com.badlogic.gdx Gdx]
            [com.badlogic.gdx.math Vector2]
            [com.badlogic.gdx.graphics FPSLogger]
            [com.badlogic.gdx.graphics OrthographicCamera]
            [com.badlogic.gdx.graphics.glutils ShapeRenderer]
-           [com.badlogic.gdx.graphics.g3d.decals Decal DecalBatch CameraGroupStrategy]))
+           [com.badlogic.gdx.graphics.g3d.decals Decal DecalBatch CameraGroupStrategy]
+           [com.badlogic.gdx.graphics.g2d ParticleEffectPool ParticleEffect ParticleEffectPool$PooledEffect]))
 
 (defonce manager (asset-manager))
 (set-asset-manager! manager)
@@ -40,7 +42,7 @@
       (r/render-debug screen entities))))
 
 (defn load-all-possible-bullet-textures! [screen]
-  (let [^TextureRegion etama (:object (texture "etama.png"))
+  (let [^TextureRegion etama (:object (texture "lbq-flavored-bullets.png"))
         textures (for [i (range 16)]
                    (for [j (range 16)]
                      (new-tr ^TextureRegion etama (* 24 i) (* 24 j) 24 24)))]
@@ -113,9 +115,10 @@
     (update! screen :stage-textures {:3c texs}))
 
   (update! screen :reimu-shot2 (new-tr (raw-tex "sanae-shots.png") 192 240 24 24))
+  (update! screen :pron-font (BitmapFont. (files! :internal "pron-18.fnt")))
   (update! screen :paper (new-tr (raw-tex "sanae-shots.png") 216 240 48 48))
   (update! screen :option (new-tr ^TextureRegion (:object (texture "pl02.png")) 144 216 24 24))
-  (update! screen :hexagram (new-tr ^TextureRegion (:object (texture "etama2.png")) 192 120 192 192)))
+  (update! screen :hexagram (:object (texture "hexagram.png"))))
 
 (defn render-fn [screen entities]
   (clear!)
@@ -198,17 +201,16 @@
     (load-all-possible-big-bullet-textures! screen)
     (load-all-possible-item-textures! screen)
     (load-all-possible-explosion-textures! screen)
+
     (test-decals! screen)
     (load-kaguya-textures! screen)
     (update! screen :renderer (stage))
     (update! screen :pause false)
-    (update! screen :pe (doto (:object (particle-effect "maple-green.pt"))
-                          (.setPosition 300 300)
-                          (.start)))
-
     (preload-textures! screen)
     (update! screen :hub-batch (SpriteBatch.))
     (update! screen :shape-renderer (new ShapeRenderer))
+    (update! screen :flame-effect
+             (doto ^ParticleEffectPool$PooledEffect (.obtain ^ParticleEffectPool (pt/particle-particle-pool-for "magical-flame.pt"))))
     (update! screen :ortho-cam
              (doto (OrthographicCamera. 960 720)
                (.translate camera-offset-x camera-offset-y)))
@@ -227,4 +229,4 @@
 (defgame scarletto-game
   :on-create
   (fn [this]
-    (set-screen! this main-screen)))
+    (set-screen! this t/title-screen)))
