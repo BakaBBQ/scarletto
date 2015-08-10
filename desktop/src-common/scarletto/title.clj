@@ -9,9 +9,13 @@
             ParticleEffectPool ParticleEffect ParticleEffectPool$PooledEffect]
            [com.badlogic.gdx.graphics Texture]
            [com.badlogic.gdx Gdx]
+           [com.badlogic.gdx.math Matrix4]
+           [com.badlogic.gdx.graphics OrthographicCamera]
            [com.badlogic.gdx.graphics.g2d Animation]
            [com.badlogic.gdx.scenes.scene2d Stage]))
 
+(defprotocol libgdx-camera-zoom
+  (zoom [this x]))
 
 (defn update-warp-in-range [f :- (Fn [Num -> Num]) l :- Num r :- Num x :- Num]
   (let [result (f x)]
@@ -57,6 +61,11 @@
 (defn get-choice3-anim []
   (animation 0.15 (get-all-choice3-textures) :set-play-mode (play-mode :loop-pingpong)))
 
+(defn get-global-zoom [t choosen?]
+  (if choosen?
+    (max (- 1 (* (Math/pow t 1.4) 0.005)) 0.2)
+    (min (+ 0.8 (* t 0.005)) 1)))
+
 (defn render-real
   [{:keys [^Stage renderer ^Animation logo-anim
            ^TextureRegion copyright-tex
@@ -65,18 +74,33 @@
            ^TextureRegion info1
            ^TextureRegion info2
            ^TextureRegion info3
+           ^OrthographicCamera ortho-cam
+           timer
+           test-switch
            font state-time ^ParticleEffectPool$PooledEffect title-particle ^TextureRegion t] :as screen} entities]
   (let [
         ^SpriteBatch batch (.getBatch renderer)
         dtime (.getDeltaTime Gdx/graphics)
-        calc-opacity #(+ 0.5 (* 1/20 % 0.5))
-        calc-opacity2 #(* 1/20 %)
+        global-opacity-multiplier (if (:selected-timer screen)
+                                    (max (* (- 40 (:selected-timer screen)) 1/40) 0)
+                                    (min (* timer 1/120) 1))
+        calc-opacity #(* (+ 0.5 (* 1/20 % 0.5)) global-opacity-multiplier)
+        calc-opacity2 #(* 1/20 % global-opacity-multiplier)
         calc-zoom #(+ 0.9 (* 1/20 % 0.1))
+        global-zoom 1
+        zoom-matrix (.scale (.cpy (.getProjectionMatrix batch)) global-zoom global-zoom 0)
         opacities (map calc-opacity choice-timers)
         info-opacities (map calc-opacity2 choice-timers)
-        zooms (map calc-zoom choice-timers)]
+        zooms (map calc-zoom choice-timers)
+        nothing (.setProjectionMatrix batch (.combined ortho-cam))]
     (do
+      (if (:selected-timer screen)
+        (zoom ortho-cam (get-global-zoom (:selected-timer screen) true))
+        (zoom ortho-cam (get-global-zoom timer false)))
+      (.update ortho-cam)
+      (.setProjectionMatrix batch (.combined ortho-cam))
       (.begin batch)
+      (.setColor batch 1 1 1 global-opacity-multiplier)
       (let [tex (.getKeyFrame logo-anim state-time)
             w (.getRegionWidth tex)
             h (.getRegionHeight tex)]
@@ -111,14 +135,20 @@
             w (.getRegionWidth tex)
             h (.getRegionHeight tex)]
         (r/draw-in-center-with-rotation-and-zoom batch tex 480 199 0 (nth zooms 2)))
-      (.setColor batch 1 1 1 1)
+      (.setColor batch 1 1 1 global-opacity-multiplier)
       (let [tex copyright-tex
             w (.getRegionWidth tex)
             h (.getRegionHeight tex)]
         (r/draw-on-batch batch tex (- 480 (/ w 2)) 71))
+      (.setColor batch 1 1 1 global-opacity-multiplier)
       (.draw title-particle batch dtime)
       (.end batch)))
   entities)
+
+(defn get-key-result [{:keys [current-index] :as screen}]
+  (if (key-pressed? :z)
+    current-index
+    -1))
 
 (defn title-update [{:keys [current-index choice-timers cursor-cd] :as screen} entities]
   (clear!)
@@ -132,18 +162,47 @@
     (do
       (update! screen :current-index (update-warp-in-range dec 0 2 (:current-index screen)))
       (update! screen :cursor-cd 10)))
+  (if (:selected-timer screen)
+    (update! screen :selected-timer (inc (:selected-timer screen))))
+  (case (get-key-result screen)
+    -1 nil
+    0 (do
+         (update! screen :selected-timer 1))
+    1 nil
+    2 (System/exit 0))
   (if (and (key-pressed? :down) (= cursor-cd 0))
     (do
       (update! screen :current-index (update-warp-in-range inc 0 2 (:current-index screen)))
       (update! screen :cursor-cd 10)))
   (render-real screen entities))
 
+
+
+(defmacro set-all [object & fields-and-values]
+  (let [obj-sym (gensym)]
+    `(let [~obj-sym ~object]
+        ~@(for [[field value] (partition 2 fields-and-values)]
+           `(set! (. ~obj-sym ~field)
+                  ~value)))))
+
+(extend-protocol libgdx-camera-zoom
+  OrthographicCamera
+  (zoom [this x] (set-all this zoom x)))
+
 (defn title-init [screen entities]
   (update! screen :current-index 0)
   (update! screen :choice-timers [0 0 0])
   (update! screen :state-time 0)
   (update! screen :timer 0)
+  (update! screen :zoom-switch false)
   (update! screen :cursor-cd 0)
+  (update! screen :ortho-cam
+             (let [cam (doto (OrthographicCamera. 960 720)
+                         (.translate 480 320))]
+               (do
+                 (zoom cam 0.8)
+                 (.update cam)
+                 cam)))
   (update! screen :logo-anim (get-logo-anim))
   (update! screen :choice1-anim (get-choice1-anim))
   (update! screen :choice2-anim (get-choice2-anim))

@@ -20,9 +20,23 @@
 (defn type? [e t] (= (:type e) t))
 
 (defn pos- [a b] (max (- a b) 0))
-(defn round-to-nearest [a b] (* b (Math/round (/ a b))))
+(defn round-to-nearest [a b] (* b (Math/round ^double (/ a b))))
 (defn power-dropped [pl] (let [p (:power pl)]
                            (max 225 (+ 225 (round-to-nearest (/ p 5) 5)))))
+
+(defn get-death-power-entities [pl]
+  (let [total-p (power-dropped pl)
+        big-p (quot total-p 100)
+        small-p (- total-p (* big-p 100))
+        total-count (+ big-p small-p)
+        angle-slice (/ 60 total-count)
+        angles (for [i (range total-count)] (+ 80 (* i angle-slice)))
+        vectors (map #(f/polar-vector 50 %) angles)
+
+
+        ungrouped-big-p (for [i (range big-p)] (f/item (:x pl) (:y pl) :big-p (nth vectors i)))
+        ungrouped-small-p (for [i (range small-p)] (f/item (:x pl) (:y pl) :power (nth vectors (+ big-p i))))]
+    (concat ungrouped-big-p ungrouped-small-p)))
 
 (defn fold-directions
   "gives a vector of 2 elements, the first element ranges from -1 to 1 showing the x key direction, the second ranges from -1 to 1, showing the y key direction"
@@ -56,14 +70,18 @@
 (defn player-bombed? [player]
   (and (key-pressed? :x) (f/player-can-bomb? player)))
 
-
 (declare dec-until-zero)
-(defn update-player-bomb [player]
+(defn update-player-bomb [player screen]
   (update-in
    (if (player-bombed? player)
-    (-> player
+    (do
+      (.start (:star-effect screen))
+      (.reset (:star-effect screen))
+      (-> player
         (update-in [:power] - 100)
-        (assoc :bomb-cd 180))
+        (assoc :bomb-timer 300)
+        (assoc :invincible 340)
+        (assoc :bomb-cd 180)))
      player)
    [:bomb-cd] dec-until-zero))
 
@@ -154,6 +172,7 @@
   (if (:collide player)
     (-> player
         (assoc :dead 90)
+        (update :power - (power-dropped player))
         (update :lives dec-until-zero))
     (update player :dead dec-until-zero)))
 
@@ -172,7 +191,7 @@
       (update :invincible dec-until-zero)))
 
 (defn update-player-when-movable
-  [entity offsets dirs slow-mode entities]
+  [entity offsets dirs slow-mode entities screen]
   (-> entity
       (set-player-x (+ (first offsets) (:x entity)))
       (set-player-y (+ (last offsets) (:y entity)))
@@ -181,7 +200,7 @@
       (c/collide-check entities)
       (update-player-dead)
       (update-dead-timer)
-      (update-player-bomb)))
+      (update-player-bomb screen)))
 
 (defmethod update-entity :player [entity entities screen]
   (let [slow-mode (key-pressed? :shift-left)
@@ -192,10 +211,15 @@
         x (:x player)
         y (:y player)
         r (if-not (player-dead? entity)
-            (update-player-when-movable entity offsets dirs slow-mode entities)
+            (update-player-when-movable entity offsets dirs slow-mode entities screen)
             (update-dead-timer entity))]
     (do
-      r)))
+      (-> r
+        (update :bomb-timer dec-until-zero)))))
+
+(defmethod update-entity :face [entity entities screen]
+  (-> entity
+      (update-in [:state-timer] + 1)))
 
 ;; so let's see.. if the player is collided... then we should mark it dead... wait.. then how can we add those power items...
 
@@ -221,7 +245,7 @@
 
 (defmethod deal-damage true [entity dmg]
   (-> entity
-      (update-in [:hp] (fn [x] (- x dmg)))))
+      (update-in [:hp] #(- % dmg))))
 
 (defmethod deal-damage :default [entity dmg]
   (-> entity
@@ -280,7 +304,6 @@
 
         magnitude (magnitude-w-t t)
         ^Vector2 newspeed (f/update-speed (:vel entity) (partial * magnitude))
-
 
         can-get-item (complement f/player-dead?)
         player (first entities)
@@ -365,10 +388,15 @@
           (assoc entity :dead true :ngc false))
         entity))))
 
+(defn within-bomb-range [e entities]
+  (let [p (first entities)
+        d (c/distance (:x e) (:y e) (:x p) (:y p))]
+    (and (< d 100) (pos? (:bomb-timer p)))))
+
 (defn update-bullet-on-player-death [e entities screen]
-  (if-not (= (:dead (first entities)) 89)
-    e
-    (f/item (:x e) (:y e) :shard (f/rect-vector 0 0))))
+  (if (or (= (:dead (first entities)) 89) (within-bomb-range e entities))
+    (assoc (f/item (:x e) (:y e) :shard (f/rect-vector 0 0)) :orig-bullet e)
+    e))
 
 (defmethod update-entity :default [entity entities screen]
   (let [^Vector2 vel (:vel entity)]
@@ -376,7 +404,8 @@
         (update :x + (.x vel))
         (update :y + (.y vel))
         (update-bullet-on-player-death entities screen)
-        (update-rotation))))
+        (update-rotation)
+        (d/update-bullet))))
 
 (defmulti update-entity-input
   (fn [screen entity]
@@ -434,10 +463,13 @@
 (defn get-dead-aftereffects
   [alive dead screen]
   (let [
-        items (filter (fn [x] (= (:type x) :item)) dead)
+        items (filter (fn [x] (and (= (:type x) :item) (:collided x))) dead)
         items-grouped (group-by :tag items)
         poweritems (:power items-grouped)
+        bigpitems (:big-p items-grouped)
         scoreitems (:score items-grouped)
+        sharditems (:shard items-grouped)
+        pbullets (filter (fn [x] (and (= (:type x) :pbullet) (:ishit x))) dead)
         p (first alive)
 
         score-accumulation (fn [y-pos]
@@ -446,12 +478,12 @@
                                (int (- 500 (* y-pos (/ 400 533))))))
         scores (map score-accumulation (map :y scoreitems))
 
-        power-accumulation (* 5 (count poweritems))
-        score-accumulation (apply + scores)
+        power-accumulation (+ (* 5 (count poweritems)) (* 100 (count bigpitems)))
+        score-accumulation (+ (apply + scores) (* 20 (count sharditems))
+                              (* 10 (count pbullets)))
         powered-up-player (-> p
                               (add-score score-accumulation)
                               (add-power power-accumulation))
-
         player-replaced (assoc alive 0 powered-up-player)
 
         e-sideeffects (flatten
@@ -539,8 +571,6 @@
   (if (:timer e)
     (update e :timer inc)
     e))
-
-
 
 (defn update-individuals
   "only updates the every each entity"
@@ -649,4 +679,7 @@
 
 (defn update-shooters
   [entities screen]
-  (d/update-shooters entities screen))
+  (concat (d/update-shooters entities screen)
+          (if (= (:dead (first entities)) 89)
+            (get-death-power-entities (first entities))
+            [])))

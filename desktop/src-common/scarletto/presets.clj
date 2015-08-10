@@ -22,6 +22,10 @@
   [x y vel]
   (assoc (bullet-rice 10 6 x y vel) :graphics-type :rice :color 0))
 
+(defn big-oval
+  [x y vel]
+  (assoc (bullet-rice 15 7 x y vel) :graphics-type :big-oval :color 0))
+
 (defn crystal
   [x y vel]
   (assoc (bullet-rice 10 6 x y vel) :graphics-type :crystal :color 0))

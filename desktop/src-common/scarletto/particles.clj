@@ -25,7 +25,7 @@
 
 (defn particle-particle-pool-for [particle-path :- String]
   (let [particle-effect (particle-effect (files! :internal particle-path) (files! :internal ""))
-        effect-pool (ParticleEffectPool. particle-effect 1 20)]
+        effect-pool (ParticleEffectPool. particle-effect 4 20)]
     effect-pool))
 
 (defn load-all-particle-pools! [screen :- Any]
@@ -36,6 +36,7 @@
   (init-particle-pool-for screen :maple-yellow "maple-yellow.pt")
   (init-particle-pool-for screen :sanae-hit-maple "sanae-hit.pt")
   (init-particle-pool-for screen :magical-frame "magical-flame.pt")
+  (init-particle-pool-for screen :sanae-bomb-particle "sanae-bomb.pt")
   (init-particle-pool-for screen :frog "frog.pt"))
 
 (defn load-title-particle-pool! [screen :- Any]

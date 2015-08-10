@@ -19,14 +19,14 @@
            [com.badlogic.gdx.graphics FPSLogger]
            [com.badlogic.gdx.graphics OrthographicCamera]
            [com.badlogic.gdx.graphics.glutils ShapeRenderer]
+           [org.ninesyllables.scarletto PrescreenScreen PauseScreen]
            [com.badlogic.gdx.graphics.g3d.decals Decal DecalBatch CameraGroupStrategy]
            [com.badlogic.gdx.graphics.g2d ParticleEffectPool ParticleEffect ParticleEffectPool$PooledEffect]))
 
 (defonce manager (asset-manager))
 (set-asset-manager! manager)
 
-(defn pause! [screen]
-  (update! screen :pause true))
+(defn pause! [screen])
 
 (defn raw-tex [st]
   (:object (texture st)))
@@ -87,7 +87,7 @@
     (update! screen :explosion-textures textures)))
 
 (defn load-all-possible-big-bullet-textures! [screen]
-  (let [^TextureRegion etama6 (:object (texture "etama6.png"))
+  (let [^TextureRegion etama6 (:object (texture "big-bullets.png"))
         textures-2-2 (for [i (range 8)]
                        (for [j (range 6)]
                          (new-tr etama6 (* 48 i) (* 48 j) 48 48)))
@@ -113,10 +113,12 @@
   (let [
         texs [(raw-tex "stage-3c-name.png") (raw-tex "stage-3c-txt1.png") (raw-tex "stage-3c-txt2.png")]]
     (update! screen :stage-textures {:3c texs}))
-
+  (let [texs {:test-sanae (raw-tex "characters/test-sanae.png") :test-kaguya (raw-tex "characters/test-kaguya.png")}]
+    (update! screen :face-textures texs))
   (update! screen :reimu-shot2 (new-tr (raw-tex "sanae-shots.png") 192 240 24 24))
   (update! screen :pron-font (BitmapFont. (files! :internal "pron-18.fnt")))
   (update! screen :paper (new-tr (raw-tex "sanae-shots.png") 216 240 48 48))
+  (update! screen :sanae-bomb (raw-tex "sanae-bomb.png"))
   (update! screen :option (new-tr ^TextureRegion (:object (texture "pl02.png")) 144 216 24 24))
   (update! screen :hexagram (:object (texture "hexagram.png"))))
 
@@ -134,7 +136,9 @@
       (update! screen :current-renderer :debug)
       (update! screen :current-renderer :real)))
   (update! screen :entities-grouped (group-by :type entities))
-  (let [trans-fn (fn [x]
+  (if (:paused screen)
+    (r/render-pause screen entities)
+    (let [trans-fn (fn [x]
                    (transduce (comp (l/update-individuals-trans entities screen)
                                     (l/clean-dead-bosses-trans entities screen))
                               conj x))]
@@ -143,7 +147,7 @@
         (l/clean-entities screen)
         (l/update-player-bullets screen)
         (l/update-shooters screen)
-        (choose-renderer-and-render screen))))
+        (choose-renderer-and-render screen)))))
 
 
 (defn game-background-camera [screen]
@@ -205,12 +209,17 @@
     (test-decals! screen)
     (load-kaguya-textures! screen)
     (update! screen :renderer (stage))
-    (update! screen :pause false)
+    (update! screen :paused false)
     (preload-textures! screen)
     (update! screen :hub-batch (SpriteBatch.))
     (update! screen :shape-renderer (new ShapeRenderer))
     (update! screen :flame-effect
              (doto ^ParticleEffectPool$PooledEffect (.obtain ^ParticleEffectPool (pt/particle-particle-pool-for "magical-flame.pt"))))
+    (update! screen :star-effect
+             (doto ^ParticleEffectPool$PooledEffect (.obtain ^ParticleEffectPool (pt/particle-particle-pool-for "sanae-bomb.pt"))))
+    (update! screen :option-effects
+             (for [i (range 4)]
+               (.obtain ^ParticleEffectPool (pt/particle-particle-pool-for "sanae-option.pt"))))
     (update! screen :ortho-cam
              (doto (OrthographicCamera. 960 720)
                (.translate camera-offset-x camera-offset-y)))
@@ -229,4 +238,9 @@
 (defgame scarletto-game
   :on-create
   (fn [this]
-    (set-screen! this t/title-screen)))
+    (set-screen! this main-screen)))
+
+(comment defgame scarletto-game
+  :on-create
+  (fn [this]
+    (.setScreen this (PauseScreen.))))

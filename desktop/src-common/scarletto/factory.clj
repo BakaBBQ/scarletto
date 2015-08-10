@@ -30,7 +30,8 @@
         bcd (:bomb-cd player)]
     (and
      (>= p 100)
-     (== bcd 0))))
+     (== bcd 0)
+     (<= (:bomb-timer player) 0))))
 
 (defn rect-vector
   [x :- Num, y :- Num]
@@ -46,11 +47,29 @@
   (let [angle (.angle ^Vector2 v2)]
     (polar-vector speed angle)))
 
+(defn reangle
+  [v2 :- Vector2, angle :- Num]
+  (let [speed (.len ^Vector2 v2)]
+    (polar-vector speed angle)))
+
+(defn reangle-bullet
+  [b :- Any, angle :- Num]
+  (assoc b :vel (reangle (:vel b) angle)))
+
+(defn bullet-angle
+  [b :- Any]
+  (let [^Vector2 v (:vel b)]
+    (.angle v)))
+
 (defn update-speed
   [v2 :- Vector2, f :- (Fn [Num -> Num])]
   (let [speed (.len ^Vector2 v2)
         angle (.angle ^Vector2 v2)]
     (polar-vector (f speed) angle)))
+
+(defn update-bullet-speed
+  [b :- Any, f :- (Fn [Num -> Num])]
+  (update b :vel (fn [v] (update-speed v f))))
 
 (defn flip-texture [t :- TextureRegion b1 :- Boolean b2 :- Boolean]
   (let [nt (TextureRegion. ^TextureRegion t)
@@ -98,7 +117,7 @@
       (-> bullet
         (update :vectors (partial map (fn [x] (rotate-vector x angle))))
         (update :rot-angle + angle)))
-    bullet))
+    (update bullet :rot-angle + angle)))
 
 (defn bullet-circle
   [r x y vel]
@@ -129,6 +148,15 @@
       (if (>= r 0)
         r
         0))))
+
+
+;; states: idle active
+(defn character-face [n pos]
+  "n => name; pos => 0 or 1"
+  {:type :face :pos 0 :state :idle :state-timer 0 :name n})
+
+(defn update-character-state [c state]
+  (assoc c :state state :state-timer 0))
 
 (def color-schemes
   {:black 0
@@ -168,7 +196,8 @@
          (fn [^Vector2 v]
            (c/distance 0 0 (.x v) (.y v)))
          vectors))]
-    {:rot-angle 0 :vectors vectors :x x :y y :vel vel :type :polygon :radius r :timer 0}))
+    (rotate-bullet {:rot-angle 0 :vectors vectors :x x :y y :vel vel :type :polygon :radius r :timer 0}
+                   (.angle ^Vector2 vel))))
 
 (comment defn bullet-polygon
   "arguments: vector of Vector2, int x, int y, Vector2 vel"
@@ -228,6 +257,7 @@
    :invincible 0
    :velocity 0
    :lives 2
+   :bomb-timer 0
    :bomb-cd 0
    :score 0
    :shottype shottype :subtype subtype :timer 0})

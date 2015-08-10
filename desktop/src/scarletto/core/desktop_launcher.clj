@@ -8,7 +8,7 @@
   []
   (let [cfg (LwjglApplicationConfiguration.)
         nothing (do
-                  (set! (.title cfg) "绯色无念 ~ Cascading Red v0.1.0")
+                  (set! (.title cfg) "v0.1.0")
                   (set! (.width cfg) 960)
                   (set! (.height cfg) 720)
                   (set! (.resizable cfg) false))]

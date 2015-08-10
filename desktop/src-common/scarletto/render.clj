@@ -3,6 +3,7 @@
   (:require [scarletto.factory :as f]
             [play-clj.core :refer :all]
             [scarletto.consts :refer :all]
+            [scarletto.config :as c]
             [clojure.core.typed :refer :all]
             [play-clj.g2d :refer :all])
   (:import [com.badlogic.gdx.graphics.g2d SpriteBatch Batch ParticleEffect BitmapFont TextureRegion]
@@ -11,6 +12,8 @@
            [com.badlogic.gdx.scenes.scene2d Stage]
            [com.badlogic.gdx.math Vector2 Vector3]
            [com.badlogic.gdx.graphics FPSLogger Color]
+           [org.ninesyllables.scarletto BlurUtils]
+           [com.badlogic.gdx.graphics Pixmap]
            [com.badlogic.gdx.graphics OrthographicCamera PerspectiveCamera]
            [com.badlogic.gdx.graphics.glutils ShapeRenderer ShapeRenderer$ShapeType]
            [com.badlogic.gdx.graphics.g3d.decals Decal DecalBatch CameraGroupStrategy]
@@ -51,6 +54,14 @@
         ^double rx (- x (/ w 2))
         ^double ry (- y (/ h 2))]
     (.draw ^SpriteBatch batch ^TextureRegion tr rx ry (/ w 2) (/ h 2) w h zoom zoom ^double rotation)))
+
+(defn draw-in-center-with-rotation-and-zoom-rx-ry
+  [batch :- SpriteBatch tr :- TextureRegion x :- Num y :- Num rotation :- Num zoom :- Num rx :- Num ry :- Num]
+  (let [w (.getRegionWidth ^TextureRegion tr)
+        h (.getRegionHeight ^TextureRegion tr)
+        ^double hx (- x (/ w 2))
+        ^double hy (- y (/ h 2))]
+    (.draw ^SpriteBatch batch ^TextureRegion tr hx hy rx ry w h zoom zoom ^double rotation)))
 
 (defmulti render-debug-entity
   (fn [entity renderer]
@@ -117,6 +128,19 @@
     (.end renderer))
   entities)
 
+(defn get-star-rotation
+  [t]
+  (let [rt (- 300 t)]
+    (Math/pow t 1.4)))
+
+(defn get-star-size
+  [t]
+  (let [rt (- 300 t)]
+    (cond
+     (< rt 60) (* rt 1/60)
+     (> rt 240) (* (- 300 rt) 1/60)
+     :default 1.0)))
+
 (defn abs-x [x]
   (- x 34))
 
@@ -138,8 +162,11 @@
   (fn [entity ^SpriteBatch batch font screen]
     (get-render-type entity)))
 
+(defn draw-font [font batch st x y]
+  (.draw ^BitmapFont font ^Batch batch ^CharSequence st ^double x ^double y))
+
 (defmethod render-real-entity :fps-counter [entity batch ^BitmapFont font screen]
-  (.draw font batch (str "fps: " (:fps entity)) 765 0))
+  (draw-font font batch (str "fps: " (:fps entity)) 765 0))
 
 (defmethod render-real-entity :dialog
   [entity ^SpriteBatch batch ^BitmapFont font screen]
@@ -157,7 +184,7 @@
         ^Color ori-color (.getColor batch)]
     (.setColor batch (.r ori-color) (.g ori-color) (.b ori-color) opacity)
     (.draw batch tex 10.0 10.0)
-    (.draw font batch (:str entity) 20 50)
+    (.draw font batch ^CharSequence (:str entity) 20.0 50.0)
     (.setColor batch ori-color)))
 
 (defn get-bullet-row [bullet]
@@ -292,15 +319,7 @@
     (do
       (draw-in-center-with-rotation batch ftexture (:x entity) (:y entity) rot)
       (draw-in-center-with-rotation batch ftexture (:x entity) (:y entity) (- 360 rot))))
-  (.setColor batch 1 1 1 1)
-  (doseq [^Vector2 v (f/get-player-option-pos entity)
-          :let [px (:x entity)
-                py (:y entity)
-                rx (+ (.x v) px)
-                ry (+ (.y v) py)
-                t (:timer entity)
-                angle (mod (* 2 t) 360)]]
-    (draw-in-center-with-rotation batch (get-player-option-texture entity screen) rx ry angle)))
+  (.setColor batch 1 1 1 1))
 
 (defn render-player-when-invincible
   ;; we need this blink effect
@@ -315,7 +334,30 @@
   (cond
    (f/player-dead? entity) (render-player-when-dead entity batch font screen)
    (f/player-invincible? entity) (render-player-when-invincible entity batch font screen)
-   :default (render-player-normal entity batch font screen)))
+   :default (render-player-normal entity batch font screen))
+  (if-not (f/player-dead? entity)
+    (doseq [i (range (count (f/get-player-option-pos entity)))
+          :let [^Vector2 v (nth (f/get-player-option-pos entity) i)
+                ^ParticleEffectPool$PooledEffect e (nth (:option-effects screen) i)
+                px (:x entity)
+                py (:y entity)
+                rx (+ (.x v) px)
+                ry (+ (.y v) py)
+                t (:timer entity)
+                angle (mod (* 2 t) 360)]]
+    (do
+      (comment draw-in-center-with-rotation batch (get-player-option-texture entity screen) rx ry angle)
+      (.draw (doto e
+               (.setPosition rx ry)) batch (.getDeltaTime Gdx/graphics)))))
+  (if (pos? (:bomb-timer entity))
+    (let [x (:x entity)
+        y (:y entity)
+        t (:bomb-timer entity)]
+      (do
+        (.draw (doto (:star-effect screen)
+               (.setPosition x (- y 0))) batch (.getDeltaTime Gdx/graphics))
+        (draw-in-center-with-rotation-and-zoom-rx-ry batch (:sanae-bomb screen) x y (get-star-rotation t) (get-star-size t) 197 169))
+    )))
 
 (defmethod render-real-entity :pbullet
   [entity ^SpriteBatch batch ^BitmapFont font screen]
@@ -343,6 +385,8 @@
             (= (pos? dx) (pos? dir))
             false)]
     r))
+
+
 
 (defn get-dx-of-shooter
   [entity]
@@ -466,6 +510,29 @@
     (do
       (.draw p batch dtime))))
 
+
+(defn orig-bullet-size
+  [t]
+  (+ 1 (* t 1/60)))
+(defn orig-bullet-opacity
+  [t]
+  (let [ti (- 30 t)]
+    (* ti 1/30)))
+
+(defn draw-orig-bullet?
+  [b]
+  (< (:timer b) 30))
+
+(defn draw-orig-bullet
+  [entity ^SpriteBatch batch ^BitmapFont font screen]
+  (if (and (:orig-bullet entity) (draw-orig-bullet? entity))
+    (let [t (:timer entity)
+          b (:orig-bullet entity)]
+      (do
+        (.setColor batch 1 1 1 (orig-bullet-opacity t))
+        (draw-in-center-with-rotation-and-zoom batch (get-bullet-texture-region b screen) (:x b) (:y b) (:rot-angle b) (orig-bullet-size t))
+        (.setColor batch 1 1 1 1)))))
+
 (defmethod render-real-entity :item
   [entity ^SpriteBatch batch ^BitmapFont font screen]
   (let [t (:timer entity)
@@ -482,7 +549,19 @@
     (do
       (.setColor batch 1 1 1 opacity)
       (draw-in-center-with-rotation batch item-tex (:x entity) (:y entity) rotation)
+      (draw-orig-bullet entity batch font screen)
       (.setColor batch 1 1 1 1))))
+
+(defmethod render-real-entity :face
+  [entity ^SpriteBatch batch ^BitmapFont font screen]
+  (let [texs (:face-textures screen)
+        ^TextureRegion tex (:name texs)
+        w (.getRegionWidth tex)
+        xpos (case (:pos entity)
+               0 0
+               1 (- c/stage-right-bound w))
+        ypos 0]
+    (draw-on-batch batch tex xpos ypos)))
 
 (defmethod render-real-entity :default [entity ^SpriteBatch batch font screen])
 
@@ -520,9 +599,18 @@
       (.end batch)
       (.begin hub-batch)
       (let [^BitmapFont font (:pron-font screen)]
-        (.draw font hub-batch (format "%010d" (:score (first entities))) 60 50))
+        (.draw font hub-batch ^CharSequence (format "%010d" (:score (first entities))) 60.0 50.0))
       (.draw hub-batch ^TextureRegion (get-front-frame-texture screen) 0.0 0.0)
       (.end hub-batch)
-      (if (key-pressed? :o)
-        (screenshot! "screenshot.png"))))
+      (if (key-pressed? :escape)
+        (do
+          (update! screen :paused true)))))
   entities)
+
+(defn render-pause
+  [{:keys [^Stage renderer ^TextureRegion paused-screenshot ^DecalBatch decal-batch font ^OrthographicCamera ortho-cam ^SpriteBatch hub-batch] :as screen} entities]
+  (let [^SpriteBatch batch (.getBatch renderer)]
+    (do
+      (.begin hub-batch)
+      (draw-on-batch hub-batch paused-screenshot 0 0)
+      (.end hub-batch))))
