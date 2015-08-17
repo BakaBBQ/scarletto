@@ -22,7 +22,6 @@
         par (doto (FreeTypeFontGenerator$FreeTypeFontParameter.))
         font (do
                (set! (.size par) size)
-               (set! (.incremental par) true)
                (.generateFont gen par))
         nothing (comment set! (.markupEnabled ^BitmapFont$BitmapFontData (.getData font)) true)]
     font))

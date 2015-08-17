@@ -14,36 +14,48 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.graphics.g2d.BitmapFont.Glyph;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.Colors;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeBitmapFontData;
 
 public class PrescreenScreen implements Screen {
   OrthographicCamera camera;
   SpriteBatch batch;
   SpriteBatch uiBatch;
+  Texture allBlack;
   BitmapFont font;
   FreeTypeFontGenerator fontGen;
   AssetManager manager;
   String currentTextureName;
+  int fadeOut = 0;
   int timer = 0;
+  Runnable r;
   String[] texts = {
-    "喵喵喵喵喵喵喵喵"
+    "[Sanae]可是难道这么快就忘了吗",
+    "[Patchouli]可是难道这么快就忘了吗"
   };
 
   Hashtable<Integer, String> script = new Hashtable<Integer, String>();
   int currentTextIndex = 0;
-  public PrescreenScreen() {
+  public PrescreenScreen(Runnable r) {
+    this.r = r;
     manager = new AssetManager();
     camera = new OrthographicCamera();
     camera.setToOrtho(false, 960, 720);
 
+    Colors.put("Sanae", Color.valueOf("84DE70"));
+    Colors.put("Patchouli", Color.valueOf("AB6BDE"));
+
     batch = new SpriteBatch();
     uiBatch = new SpriteBatch();
     font = genFont();
+    font.getData().markupEnabled = true;
 
     script.put(0, "prescreen/flash1.png");
     script.put(120, "prescreen/flash2.png");
     script.put(240, "prescreen/flash3.png");
 
+    allBlack = new Texture("all-black.png");
 
     for(int i = 1; i < 5; i++){
       manager.load("prescreen/0" + i + ".jpg", Texture.class);
@@ -102,12 +114,21 @@ public class PrescreenScreen implements Screen {
     }
     timer++;
 
+    if (timer % 120 == 30){
+      nextText();
+    }
+
+    if(fadeOut > 0){
+      fadeOut++;
+    }
+
     camera.update();
     batch.setProjectionMatrix(camera.combined);
     batch.begin();
-    font.draw(batch, currentText(), 0, 50, Gdx.graphics.getWidth(), Align.center, false);
+
     Texture tex = manager.get(currentTextureName, Texture.class);
     batch.draw(tex,0,0);
+    font.draw(batch, currentText(), 0, 50, Gdx.graphics.getWidth(), Align.center, false);
     batch.end();
 
     uiBatch.begin();

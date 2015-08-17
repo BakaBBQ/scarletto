@@ -225,6 +225,14 @@
     :graphics-type :square)
   )
 
+(defn get-spellcard-bonus [sc]
+  (let [t (:timer sc)
+        starting-value (*' 1000000 (+ 3 1))
+        r (* (- 40 (/ t 60)) 1/40 starting-value)
+        f (:failed sc)]
+    (do
+    (if f 0 (int r)))))
+
 (defn bullet-star
   [s x y vel]
   (let [ts (* 2 s)
@@ -247,6 +255,10 @@
   [s]
   {:type :dialog :ngc true :str s :timer 0})
 
+(defn spellcard-bonus
+  [score]
+  {:type :bonus :ngc true :score score :timer 0})
+
 (defn player
   [shottype subtype]
   {:radius 2 :x (/ game-width 2) :y 75 :type :player :collide false
@@ -256,7 +268,7 @@
    :ngc true
    :invincible 0
    :velocity 0
-   :lives 2
+   :lives 0
    :bomb-timer 0
    :bomb-cd 0
    :score 0
@@ -404,9 +416,9 @@
       x)))
 
 (defn spellcard
-  [tag dtag]
+  [tag dtag hp]
   {:type :sc :tag tag :dtag dtag :timer 0
-   :ngc true :hp 800})
+   :ngc true :hp hp})
 
 (defn calc-point ^Vector2
   [frame ^CatmullRomSpline path f2t]

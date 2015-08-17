@@ -21,18 +21,22 @@
 
 (defn pos- [a b] (max (- a b) 0))
 (defn round-to-nearest [a b] (* b (Math/round ^double (/ a b))))
-(defn power-dropped [pl] (let [p (:power pl)]
-                           (max 225 (+ 225 (round-to-nearest (/ p 5) 5)))))
+(defn power-dropped-orig [pl] (let [p (:power pl)]
+                           225))
+
+(defn power-dropped [pl] (let [orig (power-dropped-orig pl)
+                               big-p (quot orig 100)
+                               small-p (mod orig 100)]
+                           (+ (* big-p 100) (min small-p 25))))
 
 (defn get-death-power-entities [pl]
   (let [total-p (power-dropped pl)
         big-p (quot total-p 100)
-        small-p (- total-p (* big-p 100))
+        small-p (quot (- total-p (* big-p 100)) 5)
         total-count (+ big-p small-p)
-        angle-slice (/ 60 total-count)
-        angles (for [i (range total-count)] (+ 80 (* i angle-slice)))
-        vectors (map #(f/polar-vector 50 %) angles)
-
+        angle-slice (/ 80 (- total-count 1))
+        angles (for [i (range total-count)] (+ 50 (* i angle-slice)))
+        vectors (map #(f/polar-vector 30 %) angles)
 
         ungrouped-big-p (for [i (range big-p)] (f/item (:x pl) (:y pl) :big-p (nth vectors i)))
         ungrouped-small-p (for [i (range small-p)] (f/item (:x pl) (:y pl) :power (nth vectors (+ big-p i))))]
@@ -168,12 +172,18 @@
     (and d (pos? d))))
 
 (defn update-player-dead
-  [player]
+  [player screen]
   (if (:collide player)
-    (-> player
+    (do
+      (if (zero? (:lives player))
+        (do
+          (update! screen :gameover true)
+          (update! screen :gameover-timer 0)))
+      (-> player
         (assoc :dead 90)
         (update :power - (power-dropped player))
-        (update :lives dec-until-zero))
+        (update :power (fn [x] (if (neg? x) 0 x)))
+        (update :lives dec-until-zero)))
     (update player :dead dec-until-zero)))
 
 
@@ -198,7 +208,7 @@
       (update-player-velocity dirs)
       (update-focused-timer slow-mode)
       (c/collide-check entities)
-      (update-player-dead)
+      (update-player-dead screen)
       (update-dead-timer)
       (update-player-bomb screen)))
 
@@ -314,7 +324,7 @@
                         (or (< d 40) (> (:y player) 533) (:attract i) (tag? entity :shard))
                         (can-get-item player))
 
-        attractive-force (min (* 10 d) 8)
+        attractive-force (min (* 10 d) 5)
 
         attract-speed (f/vector-to i player attractive-force)
 
@@ -326,13 +336,19 @@
         vy (if is-move-closer
              (.y ^Vector2 attract-speed)
              (if (neg? magnitude)
-               (- 2)
+               (- 1.4)
                (.y ^Vector2 newspeed)))]
     (-> entity
         (update :x (partial + vx))
         (update :y (partial + vy))
         (assoc :dead did-collide :collided did-collide :attract is-move-closer)
         (update-exempt-once))))
+
+(defmethod update-entity :bonus [entity entities screen]
+  (let [t (:timer entity)]
+    (if (> t 90)
+      (assoc entity :ngc false :dead true)
+      entity)))
 
 (defn update-rotation [entity]
   (let [rot (:rotation entity)]
@@ -368,7 +384,9 @@
                    (update entity :ftimer inc))))))
 
 (defmethod update-entity :sc [entity entities screen]
-  entity)
+  (if (= (:dead (first entities)) 89)
+    (assoc entity :failed true)
+    entity))
 
 (defmethod update-entity :explosion [entity entiteis screen]
   (let [t (:timer entity)]
@@ -393,8 +411,9 @@
         d (c/distance (:x e) (:y e) (:x p) (:y p))]
     (and (< d 100) (pos? (:bomb-timer p)))))
 
-(defn update-bullet-on-player-death [e entities screen]
-  (if (or (= (:dead (first entities)) 89) (within-bomb-range e entities))
+(defn update-bullet-on-player-death [e entities {:keys [entities-grouped] :as screen}]
+  (if (or (= (:dead (first entities)) 89) (within-bomb-range e entities) (if (:bonus entities-grouped)
+                                                                           (== (:timer (first (:bonus entities-grouped))) 1)))
     (assoc (f/item (:x e) (:y e) :shard (f/rect-vector 0 0)) :orig-bullet e)
     e))
 
@@ -469,6 +488,10 @@
         bigpitems (:big-p items-grouped)
         scoreitems (:score items-grouped)
         sharditems (:shard items-grouped)
+        bonusitems (filter (fn [x] (and (= (:type x) :bonus) (:dead x))) dead)
+        bonusscore (if (and bonusitems (first bonusitems))
+                     (:score (first bonusitems))
+                     0)
         pbullets (filter (fn [x] (and (= (:type x) :pbullet) (:ishit x))) dead)
         p (first alive)
 
@@ -480,7 +503,8 @@
 
         power-accumulation (+ (* 5 (count poweritems)) (* 100 (count bigpitems)))
         score-accumulation (+ (apply + scores) (* 20 (count sharditems))
-                              (* 10 (count pbullets)))
+                              (* 10 (count pbullets))
+                              bonusscore)
         powered-up-player (-> p
                               (add-score score-accumulation)
                               (add-power power-accumulation))
@@ -501,9 +525,9 @@
                         ^double y (:y e)
                         ^int r (or (:radius e) 0)
 
-                        gc-down (or (:gc-down e) 0)
-                        gc-up (or (:gc-up e) offset-stage-upper-bound)
-                        b (* 1.5 r)]
+                        gc-down (or (:gc-down e) -50)
+                        gc-up (or (:gc-up e) (+ offset-stage-upper-bound 50))
+                        b (* 2.5 r)]
                      (and
                        (not= (:ngc e) true)
                        (or
@@ -525,19 +549,7 @@
 (defn clean-entities-trans
   [entities])
 
-(defn clean-dead-bosses [entities screen]
-  (if
-      (not (empty? (filter (fn [x]
-                             (and
-                              (:boss x)
-                              (<= (:hp x) 0)))
-                           (:shooter (:entities-grouped screen)))))
-    (map (fn [x]
-           (if (= (:type x) :sc)
-             (f/bullet-circle 5 100 100 (f/polar-vector 0 10))
-             x))
-         entities)
-    entities))
+
 
 
 ;;let me explain the logic here
@@ -562,7 +574,8 @@
                            (:shooter (:entities-grouped screen)))))
     (map (fn [x]
            (if (= (:type x) :sc)
-             (f/bullet-circle 5 100 100 (f/polar-vector 0 10))
+             (let [t (:timer x)]
+               (f/spellcard-bonus (f/get-spellcard-bonus x)))
              x)))
     identity))
 

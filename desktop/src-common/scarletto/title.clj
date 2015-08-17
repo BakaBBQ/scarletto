@@ -3,6 +3,7 @@
   (:require [play-clj.core :refer :all]
             [play-clj.g2d :refer :all]
             [scarletto.render :as r]
+            [scarletto.magic :as m]
             [scarletto.particles :as p]
             [clojure.core.typed :refer :all])
   (:import [com.badlogic.gdx.graphics.g2d SpriteBatch Batch ParticleEffect BitmapFont TextureRegion
@@ -13,6 +14,7 @@
            [com.badlogic.gdx.graphics OrthographicCamera]
            [com.badlogic.gdx.graphics.g2d Animation]
            [com.badlogic.gdx.scenes.scene2d Stage]))
+
 
 (defprotocol libgdx-camera-zoom
   (zoom [this x]))
@@ -77,6 +79,7 @@
            ^OrthographicCamera ortho-cam
            timer
            test-switch
+           selected-timer
            font state-time ^ParticleEffectPool$PooledEffect title-particle ^TextureRegion t] :as screen} entities]
   (let [
         ^SpriteBatch batch (.getBatch renderer)
@@ -97,6 +100,8 @@
       (if (:selected-timer screen)
         (zoom ortho-cam (get-global-zoom (:selected-timer screen) true))
         (zoom ortho-cam (get-global-zoom timer false)))
+      (if (and (:selected-timer screen) (= (:selected-timer screen) 180))
+        (m/switch-to-main!))
       (.update ortho-cam)
       (.setProjectionMatrix batch (.combined ortho-cam))
       (.begin batch)
@@ -109,38 +114,46 @@
       (let [tex (.getKeyFrame choice1-anim state-time)
             w (.getRegionWidth tex)
             h (.getRegionHeight tex)]
-        (r/draw-in-center-with-rotation-and-zoom batch tex 480 279 0 (nth zooms 0)))
+        (r/draw-in-center-with-rotation-and-zoom batch tex 480 279 90 (nth zooms 0)))
       (.setColor batch 1 1 1 (nth info-opacities 0))
       (let [tex info1
             w (.getRegionWidth tex)
             h (.getRegionHeight tex)]
-        (r/draw-in-center-with-rotation-and-zoom batch tex 480 148 0 1.0))
+        (r/draw-in-center-with-rotation-and-zoom batch tex 480 148 90 1.0))
       (.setColor batch 1 1 1 (nth info-opacities 1))
       (let [tex info2
             w (.getRegionWidth tex)
             h (.getRegionHeight tex)]
-        (r/draw-in-center-with-rotation-and-zoom batch tex 480 148 0 1.0))
+        (r/draw-in-center-with-rotation-and-zoom batch tex 480 148 90 1.0))
       (.setColor batch 1 1 1 (nth info-opacities 2))
       (let [tex info3
             w (.getRegionWidth tex)
             h (.getRegionHeight tex)]
-        (r/draw-in-center-with-rotation-and-zoom batch tex 480 148 0 1.0))
+        (r/draw-in-center-with-rotation-and-zoom batch tex 480 148 90 1.0))
       (.setColor batch 1 1 1 (nth opacities 1))
       (let [tex (.getKeyFrame choice2-anim state-time)
             w (.getRegionWidth tex)
             h (.getRegionHeight tex)]
-        (r/draw-in-center-with-rotation-and-zoom batch tex 480 239 0 (nth zooms 1)))
+        (r/draw-in-center-with-rotation-and-zoom batch tex 480 239 90 (nth zooms 1)))
       (.setColor batch 1 1 1 (nth opacities 2))
       (let [tex (.getKeyFrame choice3-anim state-time)
             w (.getRegionWidth tex)
             h (.getRegionHeight tex)]
-        (r/draw-in-center-with-rotation-and-zoom batch tex 480 199 0 (nth zooms 2)))
+        (r/draw-in-center-with-rotation-and-zoom batch tex 480 199 90 (nth zooms 2)))
       (.setColor batch 1 1 1 global-opacity-multiplier)
       (let [tex copyright-tex
             w (.getRegionWidth tex)
             h (.getRegionHeight tex)]
         (r/draw-on-batch batch tex (- 480 (/ w 2)) 71))
       (.setColor batch 1 1 1 global-opacity-multiplier)
+      (if-not (nil? selected-timer)
+        (do
+          (-> title-particle
+              (.scaleEffect global-opacity-multiplier))
+          (-> title-particle
+            (.getEmitters)
+            (.get 0)
+            (.setContinuous false))))
       (.draw title-particle batch dtime)
       (.end batch)))
   entities)
@@ -218,3 +231,6 @@
 (defscreen title-screen
   :on-show title-init
   :on-render title-update)
+
+(defn get-title-screen []
+  title-screen)

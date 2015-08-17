@@ -11,7 +11,11 @@
   [entities screen]
   (let [^long timer (:gtimer screen)]
     (case timer
+      ;20 [(f/spellcard-bonus 0)]
       20 [(gen-shooter)]
+      40 [(assoc (f/spellcard :kaguya-nonspell-1 :kaguya-nonspell-1 5) :graphics true)]
+      ;45 [(f/wait-until-all-clear)]
+      ;50 [(f/single-dialog "hello world")]
       [])))
 
 (defmulti get-new-bullets
@@ -43,6 +47,10 @@
        [])))
 
 (defmethod get-boss-movement :test-sc
+  [tag boss entities screen]
+  boss)
+
+(defmethod get-boss-movement :default
   [tag boss entities screen]
   boss)
 
@@ -97,6 +105,7 @@
     :tag :test
     :radius 12
     :mtag nil
+    :boss true
     :hp 10))
 
 (defn gen-shooter
@@ -114,8 +123,9 @@
          (f/splined t))
       :dtag :test
       :exempt-once true
-      :tag (rand-nth [:tewi-nonspell-1])
+      :tag (rand-nth [:death-fairy-one])
       :radius 12
+      :boss true
       :mtag :test
       :hp 500)))
 
@@ -140,8 +150,8 @@
     (every s 10
            (f/nway-shoot b2 30))))
 
-(defshoot :kaguya-nonspell-1
-  [s entities screen]
+(defmethod get-boss-bullets :kaguya-nonspell-1
+  [tag s entities screen]
   (let [player (first entities)
         x (:x s)
         y (:y s)
@@ -242,6 +252,87 @@
      (if (= cc 110) (concat nb))
      (if (= cc 120) (concat nb2)))))
 
+(defshoot :eientei-unfocused-shoot
+  [s entities screen]
+  (let [player (first entities)
+        t (:timer s)
+        x (:x s)
+        y (:y s)
+        rice-red (assoc (p/rice x y (f/polar-vector 2 225)) :color 1)]
+    (every s 30
+           (for [i (range 9)]
+             (assoc (p/rice x y (f/polar-vector 2 (+ (* 90 (rand)) 225))) :color 1)))))
+
+(defshoot :death-fairy-one
+  [s entities screen]
+  (let [player (first entities)
+        t (:timer s)
+        x (:x s)
+        y (:y s)
+        pl player
+        rice-red (assoc (p/rice x y (f/polar-vector 2 (mod t 360))) :color 1 :btag :tewi :turn-angle 90 :slow-time 40 :turn-time 70)
+        rice-red2 (assoc (p/rice x y (f/polar-vector 2 (+ 20 (mod t 360)))) :color 1 :btag :tewi :turn-angle 90 :slow-time 50 :turn-time 80)
+        follower-bullets (for [i (range 6)
+                               :let [angle (+ (* (/ 360 6) i) (mod t 360))
+                                     ^Vector2 appear-vector (f/polar-vector 30 angle)
+                                     appear-x (+ x (.x appear-vector))
+                                     appear-y (+ y (.y appear-vector))
+                                     aimed-angle (+ angle (- (* 1.2 360) (* 1.2 (mod t 360))))]]
+                           [(assoc (p/ring appear-x appear-y (f/polar-vector 2 aimed-angle)) :color 1)
+                            (assoc (p/ring appear-x appear-y (f/polar-vector 4 aimed-angle)) :color 1)])
+        single-bullet (let [i 0
+              angle (+ (* (/ 360 8) i) (- 360 (mod t 360)))
+                                  ^Vector2 appear-vector (f/polar-vector 50 angle)
+                                  appear-x (+ x (.x appear-vector))
+                                  appear-y (+ y (.y appear-vector))
+                                  aimed-angle (.angle (f/vector-to {:x appear-x :y appear-y} pl 3))]
+          [(assoc (p/ring appear-x appear-y (f/polar-vector 2 aimed-angle)) :color 5)
+                          (assoc (p/ring appear-x appear-y (f/polar-vector 4 aimed-angle)) :color 5)])
+        aimed-bullets (map #(f/nway-shoot % 6) single-bullet)
+        ]
+    (concat
+     (every s 30
+           (concat (f/nway-shoot rice-red 8) (f/nway-shoot rice-red2 8)))
+     (every s 14
+            (concat
+             (flatten follower-bullets))
+            )
+     (every s 22
+            (flatten aimed-bullets)))))
+
+(defshoot :death-fairy-two
+  [s entities screen]
+  (let [player (first entities)
+        t (:timer s)
+        x (:x s)
+        y (:y s)
+        pl player
+        rice-red (assoc (p/rice x y (f/polar-vector 2 (mod t 360))) :color 1 :btag :tewi :turn-angle 90 :slow-time 40 :turn-time 70)
+        rice-red2 (assoc (p/rice x y (f/polar-vector 2 (+ 20 (mod t 360)))) :color 1 :btag :tewi :turn-angle 90 :slow-time 50 :turn-time 80)
+        follower-bullets (for [i (range 6)
+                               :let [angle (+ (* (/ 360 6) i) (mod t 360))
+                                     ^Vector2 appear-vector (f/polar-vector 30 angle)
+                                     appear-x (+ x (.x appear-vector))
+                                     appear-y (+ y (.y appear-vector))
+                                     aimed-angle (+ angle (- (* 1.2 360) (* 1.2 (mod t 360))))]]
+                           [(assoc (p/big-circle appear-x appear-y (f/polar-vector 2 aimed-angle)) :color 1)
+                            (assoc (p/big-circle appear-x appear-y (f/polar-vector 4 aimed-angle)) :color 1)])
+        single-bullet (let [i 0
+              angle (+ (* (/ 360 8) i) (- 360 (mod t 360)))
+                                  ^Vector2 appear-vector (f/polar-vector 50 angle)
+                                  appear-x (+ x (.x appear-vector))
+                                  appear-y (+ y (.y appear-vector))
+                                  aimed-angle (.angle (f/vector-to {:x appear-x :y appear-y} pl 3))]
+          [(assoc (p/ring appear-x appear-y (f/polar-vector 2 aimed-angle)) :color 5)
+                          (assoc (p/ring appear-x appear-y (f/polar-vector 4 aimed-angle)) :color 5)])
+        aimed-bullets (map #(f/nway-shoot % 6) single-bullet)
+        ]
+    (concat
+     (every s 14
+            (concat
+             (flatten follower-bullets))
+            ))))
+
 
 (defshoot :test2
   [s entities screen]
@@ -276,6 +367,7 @@
 (defmovement :n
   [s entities screen]
   s)
+
 
 (defn nn
   [x]

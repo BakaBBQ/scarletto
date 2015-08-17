@@ -13,6 +13,8 @@
                   :classifier "natives-desktop"]
                  [com.badlogicgames.gdx/gdx-freetype-platform "1.6.4"
                   :classifier "natives-desktop"]
+                 [seesaw "1.4.5"]
+                 [clj-toml "0.3.1"]
                  [com.badlogicgames.gdx/gdx-platform "1.6.4"
                   :classifier "natives-desktop"]
                  [criterium "0.4.3"]
@@ -22,6 +24,6 @@
 
   :source-paths ["src" "src-common"]
   :java-source-paths ["src-java"]
-  :javac-options ["-target" "1.6" "-source" "1.6" "-Xlint:-options"]
+  :javac-options ["-target" "1.7" "-source" "1.7" "-Xlint:-options"]
   :aot [scarletto.core.desktop-launcher]
   :main scarletto.core.desktop-launcher)

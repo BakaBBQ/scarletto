@@ -9,6 +9,7 @@
             [scarletto.title :as t]
             [scarletto.font :refer :all]
             [scarletto.config :refer :all]
+            [scarletto.magic :as magic]
             [scarletto.prologue :as p]
             [scarletto.factory :as f]
             [scarletto.particles :as pt])
@@ -30,7 +31,6 @@
 
 (defn raw-tex [st]
   (:object (texture st)))
-
 
 (defn new-tr ^TextureRegion [src :- TextureRegion x :- Num y :- Num w :- Num h :- Num]
   (TextureRegion. ^TextureRegion src ^long x ^long y ^long w ^long h))
@@ -116,15 +116,31 @@
   (let [texs {:test-sanae (raw-tex "characters/test-sanae.png") :test-kaguya (raw-tex "characters/test-kaguya.png")}]
     (update! screen :face-textures texs))
   (update! screen :reimu-shot2 (new-tr (raw-tex "sanae-shots.png") 192 240 24 24))
+  (update! screen :message-font (gen-message-font))
+  (update! screen :all-black (raw-tex "all-black.png"))
+  (update! screen :kaguya-sc-background {:grunge (raw-tex "backgrounds/grunge.png")
+                                         :background (raw-tex "backgrounds/kaguya-bg.png")
+                                         :front (raw-tex "backgrounds/kaguya-front.png")})
+  (update! screen :bonus-textures {true (raw-tex "spellcard-bonus.png")
+                                   false (raw-tex "bonus-failed.png")})
   (update! screen :pron-font (BitmapFont. (files! :internal "pron-18.fnt")))
+  (update! screen :adobe-arabic {:small (BitmapFont. (files! :internal "adobe-arabic-40.fnt"))
+                                 :middle (BitmapFont. (files! :internal "adobe-arabic-60.fnt"))
+                                 :big (BitmapFont. (files! :internal "adobe-arabic-96.fnt"))})
   (update! screen :paper (new-tr (raw-tex "sanae-shots.png") 216 240 48 48))
   (update! screen :sanae-bomb (raw-tex "sanae-bomb.png"))
+  (update! screen :gameover-assets {:background (raw-tex "gameover-background.png")
+                                    :flash (raw-tex "gameover-flash.png")
+                                    :title (raw-tex "gameover-title.png")})
+  (update! screen :message-back (raw-tex "message-back.png"))
   (update! screen :option (new-tr ^TextureRegion (:object (texture "pl02.png")) 144 216 24 24))
   (update! screen :hexagram (:object (texture "hexagram.png"))))
 
 (defn render-fn [screen entities]
   (clear!)
   (update! screen :timer (inc (:timer screen)))
+  (if (:gameover-timer screen)
+    (update! screen :gameover-timer (inc (:gameover-timer screen))))
   (if (empty? (:wait (:entities-grouped screen)))
     (update! screen :gtimer (inc (:gtimer screen))))
   (if (key-pressed? :p)
@@ -136,18 +152,21 @@
       (update! screen :current-renderer :debug)
       (update! screen :current-renderer :real)))
   (update! screen :entities-grouped (group-by :type entities))
-  (if (:paused screen)
-    (r/render-pause screen entities)
-    (let [trans-fn (fn [x]
+  (cond
+   (:paused screen) (r/render-pause screen entities)
+   (:gameover screen) (-> entities
+                          (choose-renderer-and-render screen)
+                          (r/render-and-update-gameover screen))
+    :default (let [trans-fn (fn [x]
                    (transduce (comp (l/update-individuals-trans entities screen)
                                     (l/clean-dead-bosses-trans entities screen))
                               conj x))]
-    (-> entities
-        (trans-fn)
-        (l/clean-entities screen)
-        (l/update-player-bullets screen)
-        (l/update-shooters screen)
-        (choose-renderer-and-render screen)))))
+              (-> entities
+                  (trans-fn)
+                  (l/clean-entities screen)
+                  (l/update-player-bullets screen)
+                  (l/update-shooters screen)
+                  (choose-renderer-and-render screen)))))
 
 
 (defn game-background-camera [screen]
@@ -197,6 +216,9 @@
 (defscreen main-screen
   :on-show
   (fn [screen entities]
+    (doseq [[k v] screen]
+      (if-not (contains? {:ui-listeners 1, :input-listeners 1, :layers 1, :on-timer 1, :options 1, :update-fn! 1, :execute-fn-on-gl! 1, :execute-fn! 1} k)
+        (update! screen k nil)))
     (update! screen :my-tex (TextureRegion. ^TextureRegion (:object (texture "etama.png")) 0 96 24 24))
     (load-all-possible-bullet-textures! screen)
     (pt/load-all-particle-pools! screen)
@@ -205,16 +227,18 @@
     (load-all-possible-big-bullet-textures! screen)
     (load-all-possible-item-textures! screen)
     (load-all-possible-explosion-textures! screen)
-
     (test-decals! screen)
+    (println "Main Screen Called")
     (load-kaguya-textures! screen)
     (update! screen :renderer (stage))
     (update! screen :paused false)
     (preload-textures! screen)
     (update! screen :hub-batch (SpriteBatch.))
+    (update! screen :speedbatch (SpriteBatch.))
     (update! screen :shape-renderer (new ShapeRenderer))
     (update! screen :flame-effect
              (doto ^ParticleEffectPool$PooledEffect (.obtain ^ParticleEffectPool (pt/particle-particle-pool-for "magical-flame.pt"))))
+    (update! screen :enemy-bar (raw-tex "enemy-bar.png"))
     (update! screen :star-effect
              (doto ^ParticleEffectPool$PooledEffect (.obtain ^ParticleEffectPool (pt/particle-particle-pool-for "sanae-bomb.pt"))))
     (update! screen :option-effects
@@ -223,6 +247,9 @@
     (update! screen :ortho-cam
              (doto (OrthographicCamera. 960 720)
                (.translate camera-offset-x camera-offset-y)))
+    (update! screen :hub-cam
+             (doto (OrthographicCamera. 960 720)
+               (.translate (+ (/ game-width 2)) (+ (/ game-height 2)))))
     (update! screen :current-renderer :real)
     (update! screen :font (gen-font))
     (update! screen :timer 0)
@@ -235,6 +262,10 @@
   :on-render
   render-fn)
 
+(defn get-main-screen []
+  main-screen)
+
+
 (defgame scarletto-game
   :on-create
   (fn [this]
@@ -243,4 +274,7 @@
 (comment defgame scarletto-game
   :on-create
   (fn [this]
-    (.setScreen this (PauseScreen.))))
+    (.setScreen this (PrescreenScreen. (fn [] (magic/switch-to-title!))))))
+
+(defn get-game []
+  scarletto-game)
