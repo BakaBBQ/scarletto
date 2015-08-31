@@ -9,7 +9,7 @@
 (def stage-right-bound 905)
 (def stage-upper-bound 675)
 (def stage-lower-bound 40)
-(def reimu-speed [2 4])
+(def reimu-speed [2 5])
 
 (def camera-offset-x (- (/ game-width 2) stage-left-bound))
 (def camera-offset-y (- (/ game-height 2) stage-lower-bound))

@@ -14,13 +14,6 @@
 
 ;; my dream format
 
-(comment 'dream-format
-
-         [:preload "prologue1.jpg"
-          :background "prologue1.jpg"
-          :text ["blah"]
-          :text ["blah"]])
-
 ;; so it is kind of like an AVG engine
 
 ;; and we also need to support coloring... does libgdx have that built-in ...?

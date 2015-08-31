@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [atom doseq let fn defn ref dotimes defprotocol loop for])
   (:require [scarletto.collide :as c]
             [scarletto.entities]
+            [play-clj.core :refer :all]
             [play-clj.math :refer :all]
             [scarletto.config :refer :all]
             [clojure.core.typed :refer :all])
@@ -18,6 +19,9 @@
 
 (defn pause? [screen]
   (:pause screen))
+
+(defn frames-to-seconds [f]
+  (/ f 60))
 
 (defn player-dead?
   [player]
@@ -229,7 +233,7 @@
   (let [t (:timer sc)
         starting-value (*' 1000000 (+ 3 1))
         r (* (- 40 (/ t 60)) 1/40 starting-value)
-        f (:failed sc)]
+        f (or (:failed sc) (>= (:timer sc) (:timeout sc)))]
     (do
     (if f 0 (int r)))))
 
@@ -273,6 +277,16 @@
    :bomb-cd 0
    :score 0
    :shottype shottype :subtype subtype :timer 0})
+
+(defn fade-to-title!
+  [screen]
+  (do
+    (update! screen :back-to-title 1)
+    []))
+
+(defn new-message
+  []
+  {:type :new-message :msg1 "Test" :msg2 "Meow" :timer 0 :ngc true})
 
 (defn player-invincible?
   [player]
@@ -418,7 +432,7 @@
 (defn spellcard
   [tag dtag hp]
   {:type :sc :tag tag :dtag dtag :timer 0
-   :ngc true :hp hp})
+   :ngc true :hp hp :timeout (* 60 40)})
 
 (defn calc-point ^Vector2
   [frame ^CatmullRomSpline path f2t]

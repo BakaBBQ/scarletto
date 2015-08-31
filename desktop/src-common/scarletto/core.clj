@@ -7,11 +7,14 @@
             [scarletto.render :as r]
             [scarletto.logics :as l]
             [scarletto.title :as t]
+            [clojure.edn :as e]
+            [clojure.pprint :refer :all]
             [scarletto.font :refer :all]
             [scarletto.config :refer :all]
             [scarletto.magic :as magic]
             [scarletto.prologue :as p]
             [scarletto.factory :as f]
+            [scarletto.interpreter :as i]
             [scarletto.particles :as pt])
   (:import [com.badlogic.gdx.graphics.g2d SpriteBatch Batch ParticleEffect TextureRegion BitmapFont]
            [com.badlogic.gdx.graphics Texture PerspectiveCamera Camera]
@@ -29,6 +32,12 @@
 
 (defn pause! [screen])
 
+(defn load-data [filename]
+  (let [f (files! :internal (str "data/" filename))
+        s (.readString f)
+        s (slurp (str "resources/data/" filename))]
+    (e/read-string s)))
+
 (defn raw-tex [st]
   (:object (texture st)))
 
@@ -42,14 +51,14 @@
       (r/render-debug screen entities))))
 
 (defn load-all-possible-bullet-textures! [screen]
-  (let [^TextureRegion etama (:object (texture "lbq-flavored-bullets.png"))
+  (let [^TextureRegion etama (raw-tex "lbq-flavored-bullets.png")
         textures (for [i (range 16)]
                    (for [j (range 16)]
                      (new-tr ^TextureRegion etama (* 24 i) (* 24 j) 24 24)))]
     (update! screen :bullet-textures textures)))
 
 (defn load-all-possible-bullet-appear-textures! [screen]
-  (let [^TextureRegion etama (:object (texture "etama.png"))
+  (let [^TextureRegion etama (raw-tex "etama.png")
         textures (for [i (range 8)]
                    (new-tr ^TextureRegion etama (* 48 i) 312 48 48))]
     (update! screen :appear-textures textures)))
@@ -62,6 +71,12 @@
       9 (TextureRegion. etama 672 480 96 96)
       10 (TextureRegion. etama 576 384 96 96)
       11 (TextureRegion. etama 672 384 96 96))))
+
+(defn get-distinct-chars [{:keys [config contents] :as dialog-data}]
+  (let [possible-strings (concat (vals (:names config)) (map second contents))
+        duplicate-removed (distinct (vec possible-strings))
+        joined (apply str duplicate-removed)]
+    joined))
 
 (defn load-all-possible-item-textures! [screen]
   (let [^TextureRegion etama2 (:object (texture "etama2.png"))
@@ -92,7 +107,8 @@
                        (for [j (range 6)]
                          (new-tr etama6 (* 48 i) (* 48 j) 48 48)))
         textures-big (for [i (range 4)]
-                       (new-tr etama6 (* 96 i) (* 96 6) 96 96))]
+                       (for [j (range 4)]
+                         (new-tr etama6 (* 96 i) (* 96 j) 96 96)))]
     (do
       (update! screen :textures-big textures-2-2)
       (update! screen :textures-giant textures-big))))
@@ -104,10 +120,55 @@
                      (new-tr em2 (* 120 i) (* 120 j) 120 120)))]
     (update! screen :kaguya textures)))
 
+(def get-current-script
+  (memoize (fn [] (load-data "test.edn"))))
+
+(def get-current-dialog
+  (memoize (fn [] (load-data "dialog.edn"))))
+
+
+(defn transcribe-name-str [name-sym name-str color]
+  (str "[" color "]" name-str))
+
+(defn transcribe-name-sym-to-real-sym [name-sym {:keys [names colors position] :as config}]
+  (let [name-str (get names name-sym)
+        color-str (get colors name-sym)]
+    (transcribe-name-str name-sym name-str color-str)))
+
+(defn transcribe-single-dialog-data [single-data {:keys [config contents] :as dialog-data}]
+  [:dialog {:pos ((-> config
+                       (get :position)
+                       (get (first single-data))) {:up true :down false})
+            :name (transcribe-name-sym-to-real-sym (first single-data) config)
+            :msg (second single-data)}])
+
+(defn trace [x]
+  (do
+    (pprint x)
+    x))
+
+(defn transcribe-dialog-data [{:keys [config contents] :as dialog-data} at-time]
+  (let [;; transcribe
+        transcribed (identity (for [c contents]
+                      (transcribe-single-dialog-data c dialog-data)))]
+    (apply
+     merge
+     (identity
+      (for [i (range (count transcribed))
+          :let [t1 (+ at-time (* 10 i))
+                t2 (+ t1 2)
+                c (nth transcribed i)]]
+      {t1 c
+       t2 [:wait]})))))
+
+
+(defn expand-script [{:keys [dialog-inject schedule init] :as script-data}]
+  (let [parsed (transcribe-dialog-data (load-data (first dialog-inject)) (second dialog-inject))]
+    (update script-data :schedule #(merge parsed %))))
 
 
 (defn preload-textures! [screen]
-  (update! screen :player-texture (:object (texture "pl02.png")))
+  (update! screen :player-texture (raw-tex "sanae-sprite.png"))
   (update! screen :etama2 (:object (texture "etama2.png")))
   (update! screen :front-texture (:object (texture "front.png")))
   (let [
@@ -116,7 +177,9 @@
   (let [texs {:test-sanae (raw-tex "characters/test-sanae.png") :test-kaguya (raw-tex "characters/test-kaguya.png")}]
     (update! screen :face-textures texs))
   (update! screen :reimu-shot2 (new-tr (raw-tex "sanae-shots.png") 192 240 24 24))
-  (update! screen :message-font (gen-message-font))
+  (update! screen :message-font (gen-message-font (get-distinct-chars (get-current-dialog))))
+  (update! screen :message-font-big (gen-message-big-font (get-distinct-chars (get-current-dialog))))
+  (update! screen :ename-font (gen-ename-font))
   (update! screen :all-black (raw-tex "all-black.png"))
   (update! screen :kaguya-sc-background {:grunge (raw-tex "backgrounds/grunge.png")
                                          :background (raw-tex "backgrounds/kaguya-bg.png")
@@ -145,8 +208,8 @@
     (update! screen :gtimer (inc (:gtimer screen))))
   (if (key-pressed? :p)
     (println (count entities)))
-  (if (key-pressed? :escape)
-    (pause! screen))
+  (if (:paused screen)
+    (update screen :paused (inc (:paused screen))))
   (if (.isKeyPressed Gdx/input (key-code :s))
     (if (= (:current-renderer screen) :real)
       (update! screen :current-renderer :debug)
@@ -228,7 +291,6 @@
     (load-all-possible-item-textures! screen)
     (load-all-possible-explosion-textures! screen)
     (test-decals! screen)
-    (println "Main Screen Called")
     (load-kaguya-textures! screen)
     (update! screen :renderer (stage))
     (update! screen :paused false)
@@ -254,11 +316,13 @@
     (update! screen :font (gen-font))
     (update! screen :timer 0)
     (update! screen :gtimer 0)
+    (update! screen :current-script (expand-script (get-current-script)))
     (let [player (f/player :reimu :a)
           circle {:radius 10 :x 250.0 :y 250.0 :type :circle :vel (f/polar-vector 3 225)}
           dialog (f/single-dialog "See, there is nothing there!")
-          fps-counter {:fps 0 :type :fps-counter :ngc true}]
-      [player fps-counter]))
+          fps-counter {:fps 0 :type :fps-counter :ngc true}
+          r (i/interpret-init (:init (expand-script (get-current-script))))]
+      r))
   :on-render
   render-fn)
 

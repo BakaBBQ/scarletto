@@ -1,0 +1,9 @@
+;; script file
+{
+  :init [[:player {:lives 2 :power 400}] [:fps]]
+  :schedule {
+    
+  }
+
+  :dialog-inject ["dialog.edn" 60]
+}

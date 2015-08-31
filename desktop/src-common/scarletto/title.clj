@@ -15,9 +15,11 @@
            [com.badlogic.gdx.graphics.g2d Animation]
            [com.badlogic.gdx.scenes.scene2d Stage]))
 
-
 (defprotocol libgdx-camera-zoom
   (zoom [this x]))
+
+(def node-dirs
+  {0 {4 2}})
 
 (defn update-warp-in-range [f :- (Fn [Num -> Num]) l :- Num r :- Num x :- Num]
   (let [result (f x)]
@@ -68,6 +70,24 @@
     (max (- 1 (* (Math/pow t 1.4) 0.005)) 0.2)
     (min (+ 0.8 (* t 0.005)) 1)))
 
+(defn in-music-room? [screen]
+  (let [t (:musicroom-timer screen)]
+    (and t (== t 40))))
+
+(defn should-quit? [screen]
+  (let [t (:quit-timer screen)]
+    (== t 40)))
+
+(defn fade-back! [screen]
+  (update! screen :fade-back-timer 1))
+
+(defn fade-back? [screen]
+  (:fade-back-timer screen))
+
+(defn faded-back? [screen]
+  (= (:fade-back-timer screen) 40))
+
+
 (defn render-real
   [{:keys [^Stage renderer ^Animation logo-anim
            ^TextureRegion copyright-tex
@@ -84,9 +104,14 @@
   (let [
         ^SpriteBatch batch (.getBatch renderer)
         dtime (.getDeltaTime Gdx/graphics)
-        global-opacity-multiplier (if (:selected-timer screen)
-                                    (max (* (- 40 (:selected-timer screen)) 1/40) 0)
-                                    (min (* timer 1/120) 1))
+        global-opacity-multiplier (if (fade-back? screen)
+                                    (let [t (:fade-back-timer screen)]
+                                      (do
+                                        (min (* t 1/40) 1)))
+                                    (let [either-timer (or (:selected-timer screen) (:musicroom-timer screen) (:quit-timer screen))]
+                                      (if either-timer
+                                        (max (* (- 40 either-timer) 1/40) 0)
+                                        (min (* timer 1/120) 1))))
         calc-opacity #(* (+ 0.5 (* 1/20 % 0.5)) global-opacity-multiplier)
         calc-opacity2 #(* 1/20 % global-opacity-multiplier)
         calc-zoom #(+ 0.9 (* 1/20 % 0.1))
@@ -159,9 +184,11 @@
   entities)
 
 (defn get-key-result [{:keys [current-index] :as screen}]
-  (if (key-pressed? :z)
+  (if (:selected-timer screen)
+    -1
+    (if (key-pressed? :z)
     current-index
-    -1))
+    -1)))
 
 (defn title-update [{:keys [current-index choice-timers cursor-cd] :as screen} entities]
   (clear!)
@@ -177,12 +204,33 @@
       (update! screen :cursor-cd 10)))
   (if (:selected-timer screen)
     (update! screen :selected-timer (inc (:selected-timer screen))))
+  (if (:fade-back-timer screen)
+    (update! screen :fade-back-timer (inc (:fade-back-timer screen))))
+  (if (:musicroom-timer screen)
+    (do
+      (update! screen :musicroom-timer (inc (:musicroom-timer screen)))
+      (if (>= (:musicroom-timer screen) 40)
+        (update! screen :musicroom-timer 40))))
+  (if (and (in-music-room? screen) (key-pressed? :x))
+    (fade-back! screen))
+  (if (faded-back? screen)
+    (do
+      (update! screen :musicroom-timer nil)
+      (update! screen :selected-timer nil)
+      (update! screen :fade-back-timer nil)))
+  (if (:quit-timer screen)
+    (do
+      (if (should-quit? screen)
+        (System/exit 0))
+      (update! screen :quit-timer (inc (:quit-timer screen)))))
   (case (get-key-result screen)
     -1 nil
     0 (do
          (update! screen :selected-timer 1))
-    1 nil
-    2 (System/exit 0))
+    1 (do
+         (update! screen :musicroom-timer 1))
+    2 (do
+         (update! screen :quit-timer 1)))
   (if (and (key-pressed? :down) (= cursor-cd 0))
     (do
       (update! screen :current-index (update-warp-in-range inc 0 2 (:current-index screen)))
@@ -203,6 +251,9 @@
   (zoom [this x] (set-all this zoom x)))
 
 (defn title-init [screen entities]
+  (doseq [[k v] screen]
+      (if-not (contains? {:ui-listeners 1, :input-listeners 1, :layers 1, :on-timer 1, :options 1, :update-fn! 1, :execute-fn-on-gl! 1, :execute-fn! 1} k)
+        (update! screen k nil)))
   (update! screen :current-index 0)
   (update! screen :choice-timers [0 0 0])
   (update! screen :state-time 0)

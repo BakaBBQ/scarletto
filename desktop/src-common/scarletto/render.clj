@@ -29,7 +29,8 @@
 
 (defprotocol spritebatch-utils
   (set-color [this r g b a])
-  (draw-batch [this tex x y]))
+  (draw-batch [this tex x y])
+  (draw-with-zx-zy [this tex x y zx zy]))
 
 (defprotocol bitmapfont-draw
   (draw [this batch string x y])
@@ -38,7 +39,8 @@
 (extend-protocol spritebatch-utils
   SpriteBatch
   (set-color [this r g b a] (.setColor ^SpriteBatch this ^double r ^double g ^double b ^double a))
-  (draw-batch [this tex x y] (.draw ^SpriteBatch this ^TextureRegion tex ^double x ^double y)))
+  (draw-batch [this tex x y] (.draw ^SpriteBatch this ^TextureRegion tex ^double x ^double y))
+  (draw-with-zx-zy [this tex x y zx zy] (.draw ^SpriteBatch this ^TextureRegion tex ^double x ^double y (/ (.getRegionWidth ^TextureRegion tex) 2) (/ (.getRegionHeight ^TextureRegion tex) 2) (.getRegionWidth ^TextureRegion tex) (.getRegionHeight ^TextureRegion tex) ^double zx ^double zy 0.0)))
 
 (extend-protocol bitmapfont-draw
   BitmapFont
@@ -213,6 +215,29 @@
     (draw ^BitmapFont f batch ^CharSequence (:str entity) 77 (- 720 542))
     (.setColor batch ori-color)))
 
+
+(defmethod render-real-entity :new-message [{:keys [name msg] :as entity} ^SpriteBatch batch ^BitmapFont font screen]
+  (let [^TextureRegion tex (:message-back screen)
+        ^BitmapFont f (:message-font screen)
+        ^BitmapFont fb (:message-font-big screen)
+        fading? (integer? (:ftimer entity))
+
+        non-fading-opacity (min 1.0 (* 0.1 (:timer entity)))
+        ftimer (or (:ftimer entity) 0)
+        fading-opacity (max 0.0 (- 1 (* 0.1 ftimer)))
+        upper (:pos entity)
+        opacity (if fading?
+                  fading-opacity
+                  non-fading-opacity)]
+    (let [x1 -80
+          y1 (if upper 350 100)]
+      (do
+        (set-color batch 1 1 1 opacity)
+        (draw-on-batch batch tex x1 y1)
+        (draw-font fb batch name (+ 100 150 80 x1) (+ 190 y1))
+        (draw-font f batch (str "[WHITE]" msg) (+ 100 180 80 x1) (+ 140 y1))
+        (set-color batch 1 1 1 1)))))
+
 (defn get-bullet-row [bullet]
   (case (:graphics-type bullet)
     :big-star 0
@@ -225,6 +250,7 @@
     :circle 3
     :crystal 6
     :rice 4
+    :giant 3
     :star 10))
 
 (defn get-bullet-asset-type [bullet]
@@ -234,6 +260,7 @@
     :big-butterfly :textures-big
     :big-knife :textures-big
     :big-oval :textures-big
+    :giant :textures-giant
     :bullet-textures))
 
 (defn get-bullet-column [bullet]
@@ -241,6 +268,7 @@
 
 (defn get-bullet-texture-region-e [bullet screen]
   (let [r (get-bullet-row bullet)
+
         c (get-bullet-column bullet)]
     ^TextureRegion (nth (nth ((get-bullet-asset-type bullet) screen) c) r)))
 
@@ -251,19 +279,24 @@
         t (:timer player)
         raw-bounds (cond
                     (pos? vel) (if (= vel 7)
-                                 [(+ vel (- (quot (mod t 15) 3) 4)) 2]
-                                 [vel 2])
+                                 [(+ vel (- (quot (mod (quot t 5) 15) 3) 4)) 1]
+                                 [vel 1])
                     (neg? vel) (if (= abs-vel 7)
-                                 [(* (+ abs-vel (- (quot (mod t 15) 3) 4)) 1) 1]
+                                 [(* (+ abs-vel (- (quot (mod (quot t 5) 15) 3) 4)) 1) 1]
                                  [(* vel -1) 1])
-                    :else [(int (/ (mod t 24) 3)) 0])]
+                    :else [(int (/ (mod (quot t 2) 24) 3)) 0])]
     [(* 48 (first raw-bounds)) (* 72 (last raw-bounds))]))
+
+(defn get-player-texture-flipped? [player]
+  (let [vel (:velocity player)]
+    (pos? vel)))
 
 (defn get-player-texture [player screen]
   (let [^TextureRegion t (:player-texture screen)
         bounds (get-player-texture-bounds player)
+        flipped (get-player-texture-flipped? player)
         exact-region (TextureRegion. ^TextureRegion t ^int (first bounds) ^int (last bounds) 48 72)]
-    exact-region))
+    (f/flip-texture exact-region flipped false)))
 
 (defn get-player-focus-texture [player screen]
   (let [^TextureRegion t (:etama2 screen)
@@ -291,7 +324,8 @@
         y (:y entity)
         t (:timer entity)
         zoom (max (- 1.5 (* 1/20 t)) 1)
-        opacity (min (* t 1/10) 1)]
+        opacity-mult (if (= (:graphics-type entity) :giant) 0.9 1.0)
+        opacity (* (min (* t 1/10) 1) opacity-mult)]
     (do
       (set-color batch 1 1 1 opacity)
       (draw-in-center-with-rotation-and-zoom batch btex x y (:rot-angle entity) zoom)
@@ -323,17 +357,36 @@
         stage-sub-tex2 (nth textures-blah 2)
 
         stage-name-y 0
-        stage-name-x 0
+        stage-name-x (cond
+                      (<= t 60) (- (- 60 t))
+                      (<= t 240) 0
+                      (<= t 300) (let [at (- t 240)]
+                                   (- (- 60 (- 60 at))))
+                      :default 0)
+
+        subtex-x 0
+        subtex-y 0
+        subtex-zx (cond
+                      (<= t 60) (+ 1 (* (- 60 t) 1/60))
+                      (<= t 240) 1
+                      (<= t 300) (+ 1 (* (- t 240) 1/60))
+                      :default 1.0)
+        subtex-zy (cond
+                      (<= t 60) (+ 0 (* t 1/60))
+                      (<= t 240) 1
+                      (<= t 300) (+ 0 (* (- 60 (- t 240)) 1/60))
+                      :default 1.0)
         opacity (if (> t 60)
                   (if (> t 240)
-                    0
+                    (let [at (- t 240)]
+                      (- 1 (min (* at 1/60) 1)))
                     1)
                   (* (/ 1 60) t))]
     (do
       (.setColor batch 1 1 1 opacity)
-      (draw-on-batch batch ^TextureRegion stage-name-tex stage-name-x stage-name-y)
-      (draw-on-batch batch ^TextureRegion stage-sub-tex1 stage-name-x stage-name-y)
-      (draw-on-batch batch ^TextureRegion stage-sub-tex2 stage-name-x stage-name-y)
+      (draw-with-zx-zy batch ^TextureRegion stage-name-tex stage-name-x stage-name-y subtex-zx subtex-zy)
+      (draw-with-zx-zy batch ^TextureRegion stage-sub-tex1 subtex-x stage-name-y subtex-zx subtex-zy)
+      (draw-with-zx-zy batch ^TextureRegion stage-sub-tex2 subtex-x stage-name-y subtex-zx subtex-zy)
       (.setColor batch 1 1 1 1))))
 
 (defn render-player-when-dead
@@ -496,6 +549,7 @@
                   false)
         texs (:kaguya screen)
         tex-y (if horz-moving? 1 2)
+        ^BitmapFont font (:pron-font screen)
         tex-x (if horz-moving?
                 (min (quot movement 12) 2)
                 (mod rt 3))
@@ -510,6 +564,7 @@
       (.setColor batch 1 1 1 opacity)
       (draw-in-center-with-rotation-and-zoom batch hexagram-tex x y (mod (* (min (Math/pow t 1.1) (* t 3600)) 2) 360) msize)
       (.setColor batch 1 1 1 1)
+      (draw-center font batch (:name entity) 0 400 960)
       (.draw (doto (:flame-effect screen)
                (.setPosition x (- y 0))) batch (.getDeltaTime Gdx/graphics))
       (draw-in-center batch nt x y))))
@@ -600,7 +655,11 @@
 
 
 
-
+(defn round2
+  "Round a double to the given precision (number of significant digits)"
+  [precision d]
+  (let [factor (Math/pow 10 precision)]
+    (/ (Math/round (* d factor)) factor)))
 
 
 
@@ -609,6 +668,7 @@
   (if (and (first (:sc entities-grouped)) (:graphics (first (:sc entities-grouped))))
     (let [sc (first (:sc entities-grouped))
           res (:kaguya-sc-background screen)
+          ^BitmapFont f (:ename-font screen)
           boss (filter :boss (:shooter entities-grouped))
           b (first boss)
           hp (:hp b)
@@ -616,15 +676,17 @@
           ^TextureRegion grunge (:grunge res)
           background (:background res)
           front (:front res)
-          t (:timer sc)
+          ^long t (:timer sc)
+          current-time (- (:timeout sc) t)
+          current-time-f (str (int (Math/ceil ^double (f/frames-to-seconds current-time))))
           global-opacity-mult (min (* t 1/30) 1)
           h (.getRegionWidth grunge)
           y-offset (mod (* 2 timer) h)
           xo -22
-          yo -24
-          ]
+          yo -24]
       (set-color batch 1 1 1 global-opacity-mult)
       (draw-batch batch background xo yo)
+      (draw-font f batch current-time-f 100 100)
       (set-color batch 1 1 1 (* 0.2 global-opacity-mult))
       (draw-batch batch grunge xo (+ yo y-offset h))
       (draw-batch batch grunge xo (+ yo y-offset))
@@ -650,9 +712,18 @@
      :default (let [rt (- t 50)]
                 (- 1 (min (* rt 1/80) 1))))))
 
+(defn render-and-update-back-to-title
+  [btimer ^TextureRegion texture ^SpriteBatch batch]
+  (do
+    (set-color batch 1 1 1 (min (* btimer 1/60) 1))
+    (draw-on-batch batch texture 0 0)
+    (if (>= btimer 60)
+      (magic/switch-to-title!))
+    (set-color batch 1 1 1 1)))
+
 (defn render-real
   "the real renderer for game"
-  [{:keys [^Stage renderer ^SpriteBatch speedbatch ^DecalBatch decal-batch font ^OrthographicCamera ortho-cam ^OrthographicCamera hub-cam ^SpriteBatch hub-batch entities-grouped] :as screen} entities]
+  [{:keys [^Stage renderer back-to-title ^SpriteBatch speedbatch ^DecalBatch decal-batch font ^OrthographicCamera ortho-cam ^OrthographicCamera hub-cam ^SpriteBatch hub-batch entities-grouped] :as screen} entities]
 
   (let [^SpriteBatch batch (.getBatch renderer)
         black-opacity (get-all-black-opacity screen)
@@ -778,11 +849,18 @@
       (set-color hub-batch 1 1 1 black-opacity)
       (draw-batch hub-batch black-tex 0 0)
       (set-color hub-batch 1 1 1 1)
+
+      (if back-to-title
+        (do
+          (update! screen :back-to-title (inc back-to-title))
+          (render-and-update-back-to-title back-to-title black-tex hub-batch)))
       (.end hub-batch)
       (if (key-pressed? :escape)
         (do
-          (update! screen :paused true)))))
+          (update! screen :paused 0)))))
   entities)
+
+
 
 (defn render-pause
   [{:keys [^Stage renderer ^TextureRegion paused-screenshot ^DecalBatch decal-batch font ^OrthographicCamera ortho-cam ^SpriteBatch hub-batch] :as screen} entities]

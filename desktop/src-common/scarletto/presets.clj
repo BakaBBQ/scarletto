@@ -16,7 +16,7 @@
 
 (defn big-circle
   [x y vel]
-  (assoc (bullet-circle 16 x y vel) :graphics-type :big-circle :color 0))
+  (assoc (bullet-circle 14 x y vel) :graphics-type :big-circle :color 0))
 
 (defn rice
   [x y vel]
@@ -29,3 +29,7 @@
 (defn crystal
   [x y vel]
   (assoc (bullet-rice 10 6 x y vel) :graphics-type :crystal :color 0))
+
+(defn giant
+  [x y vel]
+  (assoc (bullet-circle 16 x y vel) :graphics-type :giant :color 0))

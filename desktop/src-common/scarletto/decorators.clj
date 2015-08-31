@@ -1,29 +1,40 @@
 (ns scarletto.decorators
   (:require [scarletto.factory :as f]
             [scarletto.presets :as p]
+            [scarletto.action :as a]
+            [scarletto.interpreter :as i]
             [scarletto.lifted :refer :all]
             [scarletto.config :refer :all])
   (:import [com.badlogic.gdx.math Vector2]))
 
 (declare gen-shooter)
 
-(defn insert-shooters
+(comment defn insert-shooters
   [entities screen]
   (let [^long timer (:gtimer screen)]
     (case timer
-      ;20 [(f/spellcard-bonus 0)]
-      20 [(gen-shooter)]
-      40 [(assoc (f/spellcard :kaguya-nonspell-1 :kaguya-nonspell-1 5) :graphics true)]
+      ;60 [(f/stage-text :3c)]
+      ;20 [(gen-shooter)]
+      ;40 [(f/single-dialog "hello world")]
+      ;30 (f/fade-to-title! screen)
+      ;48 [(assoc (f/spellcard :tewi-nonspell-2 :tewi-nonspell-2 5) :graphics true :timeout (* 60 5))]
       ;45 [(f/wait-until-all-clear)]
       ;50 [(f/single-dialog "hello world")]
       [])))
+
+(defn insert-shooters
+  [entities screen]
+  (let [s (:current-script screen)
+        schedule (:schedule s)
+        gtimer (:gtimer screen)]
+    (i/interpret-schedule schedule gtimer)))
 
 (defmulti get-new-bullets
   (fn [s entities screen]
     (:tag s)))
 
 (defmulti get-boss-bullets
-  (fn [spell-card-tag boss entities screen]
+  (fn [spell-card-tag at boss entities screen]
     spell-card-tag))
 
 (defmulti get-boss-movement
@@ -35,7 +46,7 @@
     spell-card-tag))
 
 (defmethod get-boss-bullets :test-sc
-  [tag boss entities screen]
+  [tag timer boss entities screen]
   (let [x (:x boss)
         y (:y boss)
         player (first entities)
@@ -111,7 +122,7 @@
 (defn gen-shooter
   []
   (let [
-        point1 (Vector2. (/ (- stage-right-bound stage-left-bound) 2) 450)
+        point1 (Vector2. (/ (- stage-right-bound stage-left-bound) 2) 250)
         point2 (Vector2. (+ (rand 600) 240) (+ (rand 480) 240))
         point3 (Vector2. (+ (rand 600) 240) (+ (rand 480) 240))
         point4 (Vector2. (+ (rand 600) 240) (+ (rand 480) 240))
@@ -123,10 +134,10 @@
          (f/splined t))
       :dtag :test
       :exempt-once true
-      :tag (rand-nth [:death-fairy-one])
+      :tag (rand-nth [:eientei-blue-aimed-bullet-one])
       :radius 12
-      :boss true
       :mtag :test
+      :name "Kaguya Houraisan"
       :hp 500)))
 
 
@@ -151,7 +162,7 @@
            (f/nway-shoot b2 30))))
 
 (defmethod get-boss-bullets :kaguya-nonspell-1
-  [tag s entities screen]
+  [tag at s entities screen]
   (let [player (first entities)
         x (:x s)
         y (:y s)
@@ -207,8 +218,8 @@
             (map (comp #(f/nway-shoot % 4) #(vamp-bullet % 30)) (rect-trianglize tb2 20)))
        []))))
 
-(defshoot :kaguya-nonspell-3
-  [s entities screen]
+(defmethod get-boss-bullets :kaguya-nonspell-3
+  [s at entities screen]
   (let [player (first entities)
         x (:x s)
         y (:y s)
@@ -222,10 +233,10 @@
        70 nb
        []))))
 
-(defshoot :tewi-nonspell-1
-  [s entities screen]
+(defmethod get-boss-bullets :tewi-nonspell-1
+  [t at s entities screen]
   (let [player (first entities)
-        t (:timer s)
+        t at
         x (:x s)
         y (:y s)
         cc (mod t 240)
@@ -252,6 +263,13 @@
      (if (= cc 110) (concat nb))
      (if (= cc 120) (concat nb2)))))
 
+(defmethod get-boss-bullets :tewi-nonspell-2
+  [t at s entities screen]
+  (let [player (first entities)
+        x (:x s)
+        y (:y s)]
+    (if (= (mod at 5) 0) (f/nway-shoot (assoc (p/rice x y (f/polar-vector 4 (+ 90 (mod at 360)))) :btag :scripted :script ['([:and [:every 3] [:between 0 81]] [:rotate-both 12])]) 10) [])))
+
 (defshoot :eientei-unfocused-shoot
   [s entities screen]
   (let [player (first entities)
@@ -262,6 +280,16 @@
     (every s 30
            (for [i (range 9)]
              (assoc (p/rice x y (f/polar-vector 2 (+ (* 90 (rand)) 225))) :color 1)))))
+
+(defshoot :eientei-blue-aimed-bullet-one
+  [s entities screen]
+  (let [player (first entities)
+        t (:timer s)
+        x (:x s)
+        y (:y s)
+        rice-red (assoc (p/big-oval x y (f/polar-vector 6 (.angle (f/vector-between s player)))) :color 1)]
+    (every s 5
+         (expand-to rice-red 20 3))))
 
 (defshoot :death-fairy-one
   [s entities screen]
@@ -385,16 +413,16 @@
         (assoc :x (.x ^Vector2 p))
         (assoc :y (.y ^Vector2 p)))))
 
-(defmulti update-bullet :btag)
+(defmulti update-bullet (fn [b screen] (:btag b)))
 
-(defmethod update-bullet :dc [bullet]
+(defmethod update-bullet :dc [bullet s]
   (let [t (:timer bullet)]
     (case t
       60 (update bullet :vel #(f/update-speed % (fn [x] (max (dec x) 0))))
       70 (update bullet :vel #(f/update-speed % (fn [x] (max (dec x) 0))))
       bullet)))
 
-(defmethod update-bullet :turn30 [bullet]
+(defmethod update-bullet :turn30 [bullet s]
   (let [t (:timer bullet)]
     (case t
       60 (-> bullet
@@ -402,7 +430,7 @@
              (f/reangle-bullet (+ 60 (f/bullet-angle bullet))))
       bullet)))
 
-(defmethod update-bullet :rot-at60 [bullet]
+(defmethod update-bullet :rot-at60 [bullet s]
   (let [t (:timer bullet)]
     (case t
       60 (-> bullet
@@ -410,7 +438,7 @@
              (f/reangle-bullet (+ 100 (f/bullet-angle bullet))))
       bullet)))
 
-(defmethod update-bullet :tewi [bullet]
+(defmethod update-bullet :tewi [bullet s]
   (let [t (:timer bullet)
         st (:slow-time bullet)
         tt (:turn-time bullet)]
@@ -424,7 +452,7 @@
 
       :default bullet)))
 
-(defmethod update-bullet :tewi2 [bullet]
+(defmethod update-bullet :tewi2 [bullet s]
   (let [t (:timer bullet)]
     (case t
       90 (update bullet :vel #(f/update-speed % (fn [x] (max (dec x) 0))))
@@ -436,7 +464,11 @@
 
       bullet)))
 
-(defmethod update-bullet :rot-at602 [bullet]
+(defmethod update-bullet :giant-default [bullet s]
+  (-> bullet
+      (f/rotate-bullet -1)))
+
+(defmethod update-bullet :rot-at602 [bullet s]
   (let [t (:timer bullet)]
     (case t
       60 (-> bullet
@@ -444,7 +476,10 @@
              (f/reangle-bullet (+ -100 (f/bullet-angle bullet))))
       bullet)))
 
-(defmethod update-bullet :default [bullet]
+(defmethod update-bullet :scripted [bullet s]
+  (a/execute-action bullet (first (:player (:entities-grouped s))) (:script bullet)))
+
+(defmethod update-bullet :default [bullet s]
   bullet)
 
 
@@ -460,11 +495,12 @@
                          :when (normal-shooter? e)]
                      (get-new-bullets e entities screen)))
 
+        spell-cards (:sc entities-grouped)
         spell-card-tags (map :tag (:sc entities-grouped))
         boss-entities (flatten
                        (for [every-boss boss]
-                        (for [every-tag spell-card-tags]
-                          (get-boss-bullets every-tag every-boss entities screen))))
+                        (for [every-sc spell-cards]
+                          (get-boss-bullets (:tag every-sc) (:timer every-sc) every-boss entities screen))))
         entities-updated (for [e entities]
                            (if (and (:boss e) ((comp not empty?) spell-card-tags))
                              (get-boss-movement (first spell-card-tags) e entities screen)

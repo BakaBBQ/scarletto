@@ -40,7 +40,7 @@
 
         ungrouped-big-p (for [i (range big-p)] (f/item (:x pl) (:y pl) :big-p (nth vectors i)))
         ungrouped-small-p (for [i (range small-p)] (f/item (:x pl) (:y pl) :power (nth vectors (+ big-p i))))]
-    (concat ungrouped-big-p ungrouped-small-p)))
+    (concat [(f/explosion (:x pl) (:y pl) 1)] ungrouped-big-p ungrouped-small-p)))
 
 (defn fold-directions
   "gives a vector of 2 elements, the first element ranges from -1 to 1 showing the x key direction, the second ranges from -1 to 1, showing the y key direction"
@@ -175,10 +175,6 @@
   [player screen]
   (if (:collide player)
     (do
-      (if (zero? (:lives player))
-        (do
-          (update! screen :gameover true)
-          (update! screen :gameover-timer 0)))
       (-> player
         (assoc :dead 90)
         (update :power - (power-dropped player))
@@ -224,6 +220,10 @@
             (update-player-when-movable entity offsets dirs slow-mode entities screen)
             (update-dead-timer entity))]
     (do
+      (if (and (zero? (:lives player)) (< 10 (:dead player)))
+        (do
+          (update! screen :gameover true)
+          (update! screen :gameover-timer 0)))
       (-> r
         (update :bomb-timer dec-until-zero)))))
 
@@ -292,6 +292,21 @@
       (d/update-single-shooter entities screen)
       (update-shooter-collide entities screen)
       (update-if-boss entities screen)))
+
+(defmethod update-entity :new-message [entity entities screen]
+  (let [key (key-pressed? :z)
+        ctrl (key-pressed? :control-left)
+        t (:timer entity)
+        fading? (integer? (:ftimer entity))]
+    (cond
+     (<= 0 t 9) entity
+     (<= 10 t) (if-not fading?
+                 (if key
+                   (assoc entity :ftimer 0)
+                   entity)
+                 (if (> (:ftimer entity) 10)
+                   (assoc entity :dead true :ngc false)
+                   (update entity :ftimer inc))))))
 
 (defmethod update-entity :pbullet [entity entities screen]
   (let [entities-grouped (:entities-grouped screen)
@@ -363,6 +378,7 @@
                                (= (:type e) :shooter)
                                (not (:boss e)))
                               (= (:type e) :dialog)
+                              (= (:type e) :new-message)
                               (= (:type e) :sc)))
                       entities))
     (assoc entity :ngc false :dead true)
@@ -424,7 +440,7 @@
         (update :y + (.y vel))
         (update-bullet-on-player-death entities screen)
         (update-rotation)
-        (d/update-bullet))))
+        (d/update-bullet screen))))
 
 (defmulti update-entity-input
   (fn [screen entity]
@@ -567,11 +583,16 @@
 ;;   return identity
 (defn clean-dead-bosses-trans [entities screen]
   (if
-      (not (empty? (filter (fn [x]
+      (or
+       (not (empty? (filter (fn [x]
                              (and
                               (:boss x)
                               (<= (:hp x) 0)))
                            (:shooter (:entities-grouped screen)))))
+       (if (and (not (nil? (:sc (:entities-grouped screen)))) (not (empty? (:sc (:entities-grouped screen)))))
+         (let [sc (first (:sc (:entities-grouped screen)))]
+           (>= (:timer sc) (:timeout sc)))
+         false))
     (map (fn [x]
            (if (= (:type x) :sc)
              (let [t (:timer x)]
@@ -651,7 +672,7 @@
         t (:timer p)
         pressed-shoot (key-pressed? :z)
         can-shoot (and
-                   (empty? (:dialog entities-grouped))
+                   (empty? (:new-message entities-grouped))
                    (not (f/player-dead? p)))
         do-shoot (and pressed-shoot can-shoot)]
     (concat entities
