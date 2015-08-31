@@ -1,12 +1,13 @@
 {
   :config {
-    :names {:sanae "东风谷早苗" :kaguya "蓬莱山辉夜"}
-    :colors {:sanae "GREEN" :kaguya "MAGENTA"}
-    :position {:sanae :down :kaguya :up}
+    :names {:sanae "东风谷早苗" :kaguya "蓬莱山辉夜" :suwako "洩矢諏訪子"}
+    :colors {:sanae "GREEN" :kaguya "MAGENTA" :suwako "#E3A276"}
+    :position {:sanae :down :kaguya :up :suwako :down}
   }
 
   :contents [
     [:sanae "各位好这只是测试一下新版的系统。" :face01]
+    [:suwako "于是我也能卖萌了喵~"]
     [:kaguya "这下系统会自动生成必要的中文字符了呢~" :face01]
   ]
 }
