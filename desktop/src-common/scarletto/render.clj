@@ -10,6 +10,7 @@
   (:import [com.badlogic.gdx.graphics.g2d SpriteBatch Batch ParticleEffect BitmapFont TextureRegion]
            [com.badlogic.gdx.graphics Texture]
            [com.badlogic.gdx Gdx]
+           [org.ninesyllables.scarletto BackgroundUtils]
            [com.badlogic.gdx.scenes.scene2d Stage]
            [com.badlogic.gdx.math Vector2 Vector3]
            [com.badlogic.gdx.graphics FPSLogger Color]
@@ -723,14 +724,15 @@
 
 (defn render-real
   "the real renderer for game"
-  [{:keys [^Stage renderer back-to-title ^SpriteBatch speedbatch ^DecalBatch decal-batch font ^OrthographicCamera ortho-cam ^OrthographicCamera hub-cam ^SpriteBatch hub-batch entities-grouped] :as screen} entities]
+  [{:keys [^TextureRegion test-title ^Stage renderer back-to-title ^SpriteBatch speedbatch ^DecalBatch decal-batch font ^OrthographicCamera ortho-cam ^OrthographicCamera hub-cam ^SpriteBatch hub-batch entities-grouped] :as screen} entities]
 
   (let [^SpriteBatch batch (.getBatch renderer)
         black-opacity (get-all-black-opacity screen)
-        black-tex ^TextureRegion (:all-black screen)]
-
+        black-tex ^TextureRegion (:all-black screen)
+        ^BackgroundUtils utils (:background-utils screen)]
     (do
-      (if-not (:gameover screen)
+      (.render utils)
+      (if-not (or (:gameover screen) (:paused screen))
         (let [^PerspectiveCamera c (:3d-cam screen)
               p (first entities)
               t (:timer p)
@@ -743,7 +745,7 @@
       (doseq [^Decal d (:decals screen)]
         (do
           (.add decal-batch ^Decal d)))
-      (.flush decal-batch)
+      (comment .flush decal-batch)
       (set! (.zoom hub-cam) 1.0)
       (.update ortho-cam)
       (.setProjectionMatrix speedbatch (.combined hub-cam))
@@ -857,17 +859,26 @@
       (.end hub-batch)
       (if (key-pressed? :escape)
         (do
-          (update! screen :paused 0)))))
+          (if (and (:paused screen) (> (:paused screen) 10))
+            (update! screen :paused-back (:paused screen))
+            (update! screen :paused 0))))))
   entities)
 
 
-
 (defn render-pause
-  [{:keys [^Stage renderer ^TextureRegion paused-screenshot ^DecalBatch decal-batch font ^OrthographicCamera ortho-cam ^SpriteBatch hub-batch] :as screen} entities]
-  (let [^SpriteBatch batch (.getBatch renderer)]
+  [entities {:keys [^Stage renderer ^TextureRegion paused-screenshot ^DecalBatch decal-batch font ^OrthographicCamera ortho-cam ^SpriteBatch hub-batch] :as screen} ]
+  (let [^SpriteBatch batch (.getBatch renderer)
+        ^TextureRegion all-black (:all-black screen)
+        t (:paused screen)
+        opacity (if (:paused-back screen)
+                  (min 0.5 (* 0.01 (- t (:paused-back screen))))
+                  (min 0.5 (* 0.01 t)))]
     (do
       (.begin hub-batch)
-      (draw-on-batch hub-batch paused-screenshot 0 0)
+      (set-color hub-batch 1 1 1 opacity)
+      (draw-batch hub-batch all-black 0 0)
+      (set-color hub-batch 1 1 1 1)
+      ;(draw-on-batch hub-batch paused-screenshot 0 0)
       (.end hub-batch))))
 
 (defn render-and-update-gameover

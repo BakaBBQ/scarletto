@@ -1,0 +1,4 @@
+;; definitions of spellcards
+{
+ :kaguya-nonspell-1 {:name "" :hp 3000}
+ }

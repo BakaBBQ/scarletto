@@ -441,14 +441,16 @@
 
 (defn calc-point-derivative-e ^Vector2
   [frame ^CatmullRomSpline path f2t]
-  (if (neg? frame)
-    (Vector2. 0 0)
-    (let [t (f2t frame)]
-      (if (or
-           (> t 0.98)
-           (< t 0.02))
-        (Vector2. 0 0)
-        (.derivativeAt path (Vector2. 0 0) t)))))
+  (if path
+    (if (neg? frame)
+      (Vector2. 0 0)
+      (let [t (f2t frame)]
+        (if (or
+              (> t 0.98)
+              (< t 0.02))
+          (Vector2. 0 0)
+          (.derivativeAt path (Vector2. 0 0) t))))
+    (Vector2. 0 0)))
 
 (defn calc-point-derivative ^Vector2
   [frame ^CatmullRomSpline path f2t]

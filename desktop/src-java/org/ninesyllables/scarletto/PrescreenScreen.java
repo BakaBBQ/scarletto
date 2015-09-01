@@ -31,6 +31,7 @@ public class PrescreenScreen implements Screen {
   int timer = 0;
   Runnable r;
   String[] texts = {
+    "",
     "[Sanae]可是难道这么快就忘了吗",
     "[Patchouli]可是难道这么快就忘了吗"
   };

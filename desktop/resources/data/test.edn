@@ -2,8 +2,9 @@
 {
   :init [[:player {:lives 2 :power 400}] [:fps]]
   :schedule {
-    
+             20 [:kaguya]
+             22 [:spellcard :kaguya-nonspell-1 3000 ""]
   }
 
-  :dialog-inject ["dialog.edn" 60]
+  :dialog-inject ["dialog.edn" 100000]
 }

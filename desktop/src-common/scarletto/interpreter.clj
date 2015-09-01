@@ -1,5 +1,6 @@
 (ns scarletto.interpreter
-  (use [scarletto.factory :as f])
+  (use [scarletto.factory :as f]
+       [scarletto.config :refer :all])
   (require [play-clj.core :refer :all]
            [clojure.edn :as e]))
 
@@ -15,6 +16,25 @@
   (merge (f/player :reimu :a) (first args)))
 (defmethod run-obj :fps [e & args]
   {:fps 0 :type :fps-counter :ngc true})
+(defmethod run-obj :cenemy [[e & args]]
+  )
+(defmethod run-obj :kaguya [[e & args]]
+  (assoc
+    (f/bullet-shooter
+      :meow :n (/ (- stage-right-bound stage-left-bound) 2) 250)
+    :dtag :test
+    :exempt-once true
+    :tag (rand-nth [:eientei-blue-aimed-bullet-one])
+    :radius 12
+    :mtag :test
+    :boss true
+    :name "Kaguya Houraisan"
+    :hp 500))
+
+(defmethod run-obj :spellcard [[e sc-tag hp name]]
+  (let []
+    (assoc (f/spellcard sc-tag sc-tag hp) :hp hp :graphics (not= "" name) :name name)))
+
 (defmethod run-obj :enemy [[e & args]]
   (let [s (first args)
         d (load-data s)]

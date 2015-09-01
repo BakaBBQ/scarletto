@@ -21,11 +21,13 @@
            [com.badlogic.gdx Gdx]
            [com.badlogic.gdx.math Vector2]
            [com.badlogic.gdx.graphics FPSLogger]
+           [org.ninesyllables.scarletto BackgroundUtils ShaderGlue]
            [com.badlogic.gdx.graphics OrthographicCamera]
            [com.badlogic.gdx.graphics.glutils ShapeRenderer]
            [org.ninesyllables.scarletto PrescreenScreen PauseScreen]
            [com.badlogic.gdx.graphics.g3d.decals Decal DecalBatch CameraGroupStrategy]
-           [com.badlogic.gdx.graphics.g2d ParticleEffectPool ParticleEffect ParticleEffectPool$PooledEffect]))
+           [com.badlogic.gdx.graphics.g2d ParticleEffectPool ParticleEffect ParticleEffectPool$PooledEffect]
+           (com.badlogic.gdx.scenes.scene2d Stage)))
 
 (defonce manager (asset-manager))
 (set-asset-manager! manager)
@@ -169,8 +171,8 @@
 
 (defn preload-textures! [screen]
   (update! screen :player-texture (raw-tex "sanae-sprite.png"))
-  (update! screen :etama2 (:object (texture "etama2.png")))
-  (update! screen :front-texture (:object (texture "front.png")))
+  (update! screen :etama2 (raw-tex "etama2.png"))
+  (update! screen :front-texture (raw-tex "front.png"))
   (let [
         texs [(raw-tex "stage-3c-name.png") (raw-tex "stage-3c-txt1.png") (raw-tex "stage-3c-txt2.png")]]
     (update! screen :stage-textures {:3c texs}))
@@ -180,6 +182,7 @@
   (update! screen :message-font (gen-message-font (get-distinct-chars (get-current-dialog))))
   (update! screen :message-font-big (gen-message-big-font (get-distinct-chars (get-current-dialog))))
   (update! screen :ename-font (gen-ename-font))
+  (update! screen :background-utils (BackgroundUtils. 960 720))
   (update! screen :all-black (raw-tex "all-black.png"))
   (update! screen :kaguya-sc-background {:grunge (raw-tex "backgrounds/grunge.png")
                                          :background (raw-tex "backgrounds/kaguya-bg.png")
@@ -208,15 +211,24 @@
     (update! screen :gtimer (inc (:gtimer screen))))
   (if (key-pressed? :p)
     (println (count entities)))
-  (if (:paused screen)
-    (update screen :paused (inc (:paused screen))))
+  (if (and (:paused screen) (not (:paused-back screen)))
+    (update! screen :paused (inc (:paused screen))))
+  (if (:paused-back screen)
+    (do
+      (update! screen :paused (dec (:paused screen)))
+      (if (< (:paused screen) 0)
+        (do
+          (update! screen :paused nil)
+          (update! screen :paused-back nil)))))
   (if (.isKeyPressed Gdx/input (key-code :s))
     (if (= (:current-renderer screen) :real)
       (update! screen :current-renderer :debug)
       (update! screen :current-renderer :real)))
   (update! screen :entities-grouped (group-by :type entities))
   (cond
-   (:paused screen) (r/render-pause screen entities)
+   (:paused screen) (-> entities
+                        (choose-renderer-and-render screen)
+                        (r/render-pause screen))
    (:gameover screen) (-> entities
                           (choose-renderer-and-render screen)
                           (r/render-and-update-gameover screen))
@@ -292,11 +304,17 @@
     (load-all-possible-explosion-textures! screen)
     (test-decals! screen)
     (load-kaguya-textures! screen)
-    (update! screen :renderer (stage))
+    (let [renderer (stage)
+          batch (.getBatch renderer)]
+      (do
+        (.setShader batch (ShaderGlue/genShaderProgram))
+        (update! screen :renderer renderer)))
     (update! screen :paused false)
+    (update! screen :test-title (raw-tex "test-title.png"))
     (preload-textures! screen)
     (update! screen :hub-batch (SpriteBatch.))
     (update! screen :speedbatch (SpriteBatch.))
+
     (update! screen :shape-renderer (new ShapeRenderer))
     (update! screen :flame-effect
              (doto ^ParticleEffectPool$PooledEffect (.obtain ^ParticleEffectPool (pt/particle-particle-pool-for "magical-flame.pt"))))

@@ -119,6 +119,7 @@
     :boss true
     :hp 10))
 
+
 (defn gen-shooter
   []
   (let [

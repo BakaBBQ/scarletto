@@ -2,7 +2,8 @@
   (:require [scarletto.core :refer :all])
   (:import [com.badlogic.gdx.backends.lwjgl LwjglApplication LwjglApplicationConfiguration]
            [org.lwjgl.input Keyboard]
-           [org.ninesyllables.scarletto DirUtils])
+           [org.ninesyllables.scarletto DirUtils]
+           [com.badlogic.gdx Files$FileType])
   (:gen-class))
 
 (def re-keyval #"^\s*(\w+)\s*=?(.*)")
@@ -51,5 +52,8 @@
         (set! (.width cfg) (first resolution))
         (set! (.height cfg) (second resolution))
         (set! (.resizable cfg) false)
+        (doseq [s [16 32 64 128]
+                :let [filename (str "icon" s ".png")]]
+          (.addIcon cfg filename Files$FileType/Internal))
         (LwjglApplication. scarletto-game cfg)
         (Keyboard/enableRepeatEvents true)))))
