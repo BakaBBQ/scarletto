@@ -438,7 +438,7 @@
         y (:y entity)
         t (:bomb-timer entity)]
       (do
-        (.draw (doto (:star-effect screen)
+        (.draw (doto ^ParticleEffect (:star-effect screen)
                (.setPosition x (- y 0))) batch (.getDeltaTime Gdx/graphics))
         (draw-in-center-with-rotation-and-zoom-rx-ry batch (:sanae-bomb screen) x y (get-star-rotation t) (get-star-size t) 197 169))
     )))
@@ -449,7 +449,9 @@
         opacity (min (* 0.1 t) 1)]
     (do
       (.setColor batch 1 1 1 (* 0.6 opacity))
-      (draw-in-center-with-rotation batch (get-player-bullet-texture entity screen) (:x entity) (:y entity) (.angle ^Vector2 (:vel entity)))
+      (if (:ttimer entity)
+        (draw-in-center-with-rotation batch (get-player-bullet-texture entity screen) (:x entity) (:y entity) 0)
+        (draw-in-center-with-rotation batch (get-player-bullet-texture entity screen) (:x entity) (:y entity) (.angle ^Vector2 (:vel entity))))
       (.setColor batch 1 1 1 1))))
 
 
@@ -566,7 +568,7 @@
       (draw-in-center-with-rotation-and-zoom batch hexagram-tex x y (mod (* (min (Math/pow t 1.1) (* t 3600)) 2) 360) msize)
       (.setColor batch 1 1 1 1)
       (draw-center font batch (:name entity) 0 400 960)
-      (.draw (doto (:flame-effect screen)
+      (.draw (doto ^ParticleEffect (:flame-effect screen)
                (.setPosition x (- y 0))) batch (.getDeltaTime Gdx/graphics))
       (draw-in-center batch nt x y))))
 
@@ -622,11 +624,13 @@
 (defmethod render-real-entity :item
   [entity ^SpriteBatch batch ^BitmapFont font screen]
   (let [t (:timer entity)
+        ^ParticleEffectPool$PooledEffect magical-item-eff (:magical-item-effect screen)
         index (case (:tag entity)
                 :power 0
                 :score 1
                 :big-p 3
                 :shard 7)
+        draw-graphics (not= (:tag entity) :shard)
         ^TextureRegion item-tex (nth (:item-textures screen) index)
         rotation (if (> t 30)
                    90
@@ -635,8 +639,12 @@
     (do
       (.setColor batch 1 1 1 opacity)
       (draw-in-center-with-rotation batch item-tex (:x entity) (:y entity) rotation)
+
       (draw-orig-bullet entity batch font screen)
-      (.setColor batch 1 1 1 1))))
+      (.setColor batch 1 1 1 1))
+      ))
+
+
 
 (defmethod render-real-entity :face
   [entity ^SpriteBatch batch ^BitmapFont font screen]

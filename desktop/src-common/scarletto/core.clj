@@ -193,7 +193,7 @@
   (update! screen :adobe-arabic {:small (BitmapFont. (files! :internal "adobe-arabic-40.fnt"))
                                  :middle (BitmapFont. (files! :internal "adobe-arabic-60.fnt"))
                                  :big (BitmapFont. (files! :internal "adobe-arabic-96.fnt"))})
-  (update! screen :paper (new-tr (raw-tex "sanae-shots.png") 216 240 48 48))
+  (update! screen :paper (new-tr (raw-tex "pl00.png") 0 (- 240 24) 24 24))
   (update! screen :sanae-bomb (raw-tex "sanae-bomb.png"))
   (update! screen :gameover-assets {:background (raw-tex "gameover-background.png")
                                     :flash (raw-tex "gameover-flash.png")
@@ -318,6 +318,8 @@
     (update! screen :shape-renderer (new ShapeRenderer))
     (update! screen :flame-effect
              (doto ^ParticleEffectPool$PooledEffect (.obtain ^ParticleEffectPool (pt/particle-particle-pool-for "magical-flame.pt"))))
+    (update! screen :magical-item-effect
+             (doto ^ParticleEffectPool$PooledEffect (.obtain ^ParticleEffectPool (pt/particle-particle-pool-for "magical-item.pt"))))
     (update! screen :enemy-bar (raw-tex "enemy-bar.png"))
     (update! screen :star-effect
              (doto ^ParticleEffectPool$PooledEffect (.obtain ^ParticleEffectPool (pt/particle-particle-pool-for "sanae-bomb.pt"))))

@@ -18,10 +18,18 @@
   {:fps 0 :type :fps-counter :ngc true})
 (defmethod run-obj :cenemy [[e & args]]
   )
+
+(defmulti run-custom identity)
+(defmethod run-custom :path-enemy [])
+
+(defmethod run-obj :custom [[e name]]
+  (run-custom name))
+
+
 (defmethod run-obj :kaguya [[e & args]]
   (assoc
     (f/bullet-shooter
-      :meow :n (/ (- stage-right-bound stage-left-bound) 2) 250)
+      :meow :n (/ (- stage-right-bound stage-left-bound) 2) 450)
     :dtag :test
     :exempt-once true
     :tag (rand-nth [:eientei-blue-aimed-bullet-one])

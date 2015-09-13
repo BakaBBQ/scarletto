@@ -7,13 +7,14 @@
             [scarletto.config :refer :all])
   (:import [com.badlogic.gdx.math Vector2]))
 
-(declare gen-shooter)
+(declare gen-shooter gen-first-shooter)
 
-(comment defn insert-shooters
+(defn insert-shooters
   [entities screen]
   (let [^long timer (:gtimer screen)]
     (case timer
       ;60 [(f/stage-text :3c)]
+      60 [(gen-first-shooter)]
       ;20 [(gen-shooter)]
       ;40 [(f/single-dialog "hello world")]
       ;30 (f/fade-to-title! screen)
@@ -22,7 +23,21 @@
       ;50 [(f/single-dialog "hello world")]
       [])))
 
-(defn insert-shooters
+(defn gen-first-shooter []
+  (assoc
+    (f/bullet-shooter-w-path
+      :meow :n
+      [(f/rect-vector -10 400)
+       (f/rect-vector 400 -100)]
+      (f/stairs [[0 0.0] [20 0.2] [10000 1.0]]))
+    :dtag :test
+    :exempt-once true
+    :tag :death-fairy-one
+    :radius 12
+    :mtag :default
+    :hp 10))
+
+(comment defn insert-shooters
   [entities screen]
   (let [s (:current-script screen)
         schedule (:schedule s)
@@ -104,7 +119,7 @@
 (def test-shooter
   (assoc
       (f/bullet-shooter-w-path
-       :meow :n (- stage-right-bound stage-left-bound) 350
+       :meow :n
        [(Vector2. 200 200)
         (Vector2. 400 400)
         (Vector2. 200 200)
@@ -397,7 +412,6 @@
   [s entities screen]
   s)
 
-
 (defn nn
   [x]
   (if (nil? x)
@@ -407,11 +421,12 @@
 (defmovement :default
   [s entities screen]
   (let [t (nn (:timer s))
-        p (nn (:path s))
+        pa (nn (:path s))
         m (nn (:movement s))
-        p (f/calc-point t p m)]
+        p (f/calc-point t pa m)]
     (-> s
         (assoc :x (.x ^Vector2 p))
+        (assoc :dv (f/calc-point-derivative t pa m))
         (assoc :y (.y ^Vector2 p)))))
 
 (defmulti update-bullet (fn [b screen] (:btag b)))

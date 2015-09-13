@@ -413,8 +413,11 @@
    :exempt-once true :ngc true})
 
 (defn bullet-shooter-w-path
-  [tag mtag x y path-points movement]
-  (let [path (catmull-rom-spline path-points true)]
+  [tag mtag path-points movement]
+  (let [
+        x (.x ^Vector2 (first path-points))
+        y (.y ^Vector2 (first path-points))
+        path (catmull-rom-spline path-points true)]
     (assoc (bullet-shooter tag mtag x y) :path path :movement movement)))
 
 (defn splined
@@ -429,6 +432,22 @@
     (let [x (/ frame time-span)]
       x)))
 
+(defn interpolator
+  "Takes a coll of 2D points (vectors) and returns
+   their linear interpolation function."
+  [points]
+  (let [m (into (sorted-map) points)]
+    (fn [x]
+      (let [[[x1 y1]] (rsubseq m <= x)
+            [[x2 y2]] (subseq m > x)]
+        (if x2
+          (+ y1 (* (- x x1) (/ (- y2 y1) (- x2 x1))))
+          y1)))))
+
+(defn stairs
+  [m]
+  (interpolator m))
+
 (defn spellcard
   [tag dtag hp]
   {:type :sc :tag tag :dtag dtag :timer 0
@@ -437,7 +456,9 @@
 (defn calc-point ^Vector2
   [frame ^CatmullRomSpline path f2t]
   (let [t (f2t frame)]
-    (.valueAt path (Vector2. 0 0) t)))
+    (do
+      (println t)
+      (.valueAt path (Vector2. 0 0) t))))
 
 (defn calc-point-derivative-e ^Vector2
   [frame ^CatmullRomSpline path f2t]

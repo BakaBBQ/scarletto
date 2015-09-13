@@ -314,19 +314,41 @@
         is-collide  (some
                      (fn [x] (c/player-bullet-collide-shooter? entity x))
                      all-shooters)
-        ^Vector2 vel (:vel entity)]
+        hmatch-fn (fn [e]
+                    (< (Math/abs ^double
+                                 (- (:y e) (:y entity)))
+                       10))
+        horizontal-match (find-first hmatch-fn all-shooters)
+        fly-dir (if (and horizontal-match (= (:dmg entity) 2))
+                        (if (pos? (- (:x horizontal-match) (:x entity))) 1 -1)
+                        0)
+        ^Vector2 vel (:vel entity)
+        turn-timer (if-let [x (:ttimer entity)]
+                     x
+                     (:timer entity))
+                                                   ;(println (- (:timer entity) turn-timer))
+        spd (* (.len vel) (min (* (- (:timer entity) turn-timer) 0.1) 1))
+        newDir (case fly-dir
+                 1 (Vector2. spd 0)
+                 -1 (Vector2. (- spd) 0)
+                 0 (Vector2. 0 (* (.len vel) (min (* (:timer entity) 0.1) 1))))
+        r (-> entity
+              (update-in [:x] (partial + (.x newDir)))
+              (update-in [:y] (partial + (.y newDir))))]
     (if is-collide
        (assoc entity :dead true :ishit true)
-       (-> entity
-          (update-in [:x] (partial + (.x vel)))
-          (update-in [:y] (partial + (.y vel)))))))
+       (if (and (not
+                  (zero? fly-dir))
+                (not (:ttimer r)))
+         (assoc r :ttimer (:timer r))
+         r))))
 
 (defmethod update-entity :item [entity entities screen]
   (let [i entity
         t (:timer i)
         ;;magnitude-w-t (fn [x] (- 1 (/ x 60)))
         magnitude-w-t (fn [x] (- 1 (/ (Math/pow x 0.5) 4)))
-
+        moving-up? (= (:tag i) :shard)
         magnitude (magnitude-w-t t)
         ^Vector2 newspeed (f/update-speed (:vel entity) (partial * magnitude))
 
@@ -339,7 +361,7 @@
                         (or (< d 40) (> (:y player) 533) (:attract i) (tag? entity :shard))
                         (can-get-item player))
 
-        attractive-force (min (* 10 d) 5)
+        attractive-force (max (* 0.04 d) 5)
 
         attract-speed (f/vector-to i player attractive-force)
 
@@ -351,7 +373,7 @@
         vy (if is-move-closer
              (.y ^Vector2 attract-speed)
              (if (neg? magnitude)
-               (- 1.4)
+               (if moving-up? 0.4 (- 1.2))
                (.y ^Vector2 newspeed)))]
     (-> entity
         (update :x (partial + vx))
@@ -643,10 +665,10 @@
         direction-fn (fn []
                        (+ (rand (- 60 f)) 60 (/ f 2)))
         direction (+ (rand 60) 60)
-        bullet-fn (fn []
+        bullet-fn (fn [x]
 
-                    (assoc (f/player-bullet 2 rx ry (f/polar-vector (+ (rand 4) 9) (direction-fn)) 2) :dtag :frog))]
-    [(bullet-fn) (bullet-fn) (bullet-fn)]))
+                    (update (assoc (f/player-bullet 2 rx ry (f/polar-vector 16 90) 2) :dtag :frog) :x + x))]
+    [(bullet-fn -8) (bullet-fn 8)]))
 
 (defn get-player-option-bullets
   [p]

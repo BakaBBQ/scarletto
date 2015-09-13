@@ -6,6 +6,7 @@
                  [com.badlogicgames.gdx/gdx-backend-lwjgl "1.6.4"]
                  [com.badlogicgames.gdx/gdx-box2d "1.6.4"]
                  [com.badlogicgames.gdx/gdx-freetype "1.6.4"]
+                 [com.badlogicgames.gdx/gdx-tools "1.6.4"]
                  [com.badlogicgames.gdx/gdx-box2d-platform "1.5.5"
                   :classifier "natives-desktop"]
                  [com.badlogicgames.gdx/gdx-bullet "1.5.5"]
